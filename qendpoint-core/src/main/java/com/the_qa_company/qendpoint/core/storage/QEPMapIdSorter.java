@@ -92,7 +92,8 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 				CloseSuppressPath output = merger.waitResult().orElse(null);
 
 				if (output != null) {
-					try (BufferedInputStream stream = new BufferedInputStream(Files.newInputStream(output))) {
+					try (BufferedInputStream stream = new BufferedInputStream(Files.newInputStream(output),
+							4 * 1024 * 1024)) {
 						QEPMapReader reader = new QEPMapReader(stream);
 
 						long index = 0;
@@ -184,7 +185,7 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 				InputStream[] pathInput = new InputStream[inputs.size()];
 
 				for (int i = 0; i < pathInput.length; i++) {
-					pathInput[i] = new BufferedInputStream(Files.newInputStream(inputs.get(i)));
+					pathInput[i] = new BufferedInputStream(Files.newInputStream(inputs.get(i)), 4 * 1024 * 1024);
 				}
 
 				try {

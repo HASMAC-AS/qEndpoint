@@ -161,7 +161,7 @@ public class PFCDictionarySectionBig implements DictionarySectionPrivate {
 				byteOut.writeTo(out);
 			}
 
-			try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+			try (InputStream in = new BufferedInputStream(new FileInputStream(file), 4 * 1024 * 1024)) {
 				// Read block by block
 				// Read packed data
 

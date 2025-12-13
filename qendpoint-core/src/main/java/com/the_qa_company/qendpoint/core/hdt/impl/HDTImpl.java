@@ -163,7 +163,7 @@ public class HDTImpl extends HDTBase<HeaderPrivate, DictionaryPrivate, TriplesPr
 		if (hdtFileName.endsWith(".gz")) {
 			in = new BufferedInputStream(new GZIPInputStream(new FileInputStream(hdtFileName)));
 		} else {
-			in = new CountInputStream(new BufferedInputStream(new FileInputStream(hdtFileName)));
+			in = new CountInputStream(new BufferedInputStream(new FileInputStream(hdtFileName), 4 * 1024 * 1024));
 		}
 		loadFromHDT(in, listener);
 		in.close();
@@ -193,8 +193,8 @@ public class HDTImpl extends HDTBase<HeaderPrivate, DictionaryPrivate, TriplesPr
 		}
 
 		boolean dumpBinInfo = spec.getBoolean(HDTOptionsKeys.DUMP_BINARY_OFFSETS, false);
-		try (CountInputStream input = new CountInputStream(new BufferedInputStream(new FileInputStream(hdtFileName)),
-				dumpBinInfo)) {
+		try (CountInputStream input = new CountInputStream(
+				new BufferedInputStream(new FileInputStream(hdtFileName), 4 * 1024 * 1024), dumpBinInfo)) {
 
 			input.printIndex("HDT CI");
 

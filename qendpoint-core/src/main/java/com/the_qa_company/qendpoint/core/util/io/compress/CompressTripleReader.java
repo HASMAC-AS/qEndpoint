@@ -18,7 +18,7 @@ import java.io.InputStream;
  */
 public class CompressTripleReader implements ExceptionIterator<TripleID, IOException>, Closeable {
 	private final CRCInputStream stream;
-	private final TripleID next = new TripleID(-1, -1, -1);
+	private TripleID next = new TripleID(-1, -1, -1);
 	private boolean read = false, end = false;
 	private final boolean quad;
 
@@ -88,9 +88,9 @@ public class CompressTripleReader implements ExceptionIterator<TripleID, IOExcep
 		// map the triples to the end id, compute the shared with the end shared
 		// size
 		if (quad) {
-			next.setAll(s, p, o, g);
+			next = new TripleID(s, p, o, g);
 		} else {
-			next.setAll(s, p, o);
+			next = new TripleID(s, p, o);
 		}
 		read = true;
 		return false;

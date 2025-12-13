@@ -16,11 +16,13 @@ import java.util.Iterator;
  */
 public class FileTripleIterator extends FileChunkIterator<TripleString> {
 	public static long estimateSize(TripleString tripleString) {
-		try {
-			return ByteString.of(tripleString.asNtriple()).getBuffer().length;
-		} catch (IOException e) {
-			throw new RuntimeException("Can't estimate the size of the triple " + tripleString, e);
-		}
+//		try {
+		return tripleString.getSubject().length() + tripleString.getPredicate().length()
+				+ tripleString.getObject().length() + 10;
+//			return ByteString.of(tripleString.asNtriple()).getBuffer().length;
+//		} catch (IOException e) {
+//			throw new RuntimeException("Can't estimate the size of the triple " + tripleString, e);
+//		}
 	}
 
 	/**

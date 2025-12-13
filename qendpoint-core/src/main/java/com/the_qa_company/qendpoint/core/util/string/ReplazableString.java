@@ -364,6 +364,28 @@ public final class ReplazableString implements CharSequence, ByteString {
 		throw new NotImplementedException();
 	}
 
+	@Override
+	public int compareTo(ByteString other) {
+		if (other instanceof ReplazableString) {
+			int n = Math.min(length(), other.length());
+			int k = 0;
+			byte[] otherBuffer = ((ReplazableString) other).buffer;
+			while (k < n) {
+				byte c1 = buffer[k];
+				byte c2 = otherBuffer[k];
+				if (c1 != c2) {
+					return charAt(k) - other.charAt(k);
+				}
+				k++;
+			}
+			return length() - other.length();
+
+		}
+
+		return ByteString.super.compareTo(other);
+
+	}
+
 	/*
 	 * (non-Javadoc)
 	 * @see java.lang.CharSequence#subSequence(int, int)
@@ -386,5 +408,16 @@ public final class ReplazableString implements CharSequence, ByteString {
 
 	public CharSequence getDelayed() {
 		return new DelayedString(this);
+	}
+
+	public void copy(ReplazableString prev) {
+		// duplicate prev.buffer
+		if (prev.buffer.length > buffer.length) {
+			buffer = Arrays.copyOf(prev.buffer, prev.buffer.length);
+		} else {
+			System.arraycopy(prev.buffer, 0, buffer, 0, prev.used);
+		}
+		used = prev.used;
+
 	}
 }

@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * @author Antoine Willerval
  */
 public class CloseSuppressPath implements Path, Closeable {
-	public static final int BUFFER_SIZE = 1 << 13;
+	public static final int BUFFER_SIZE = 4 * 1024 * 1024;
 	private final Path wrapper;
 	private boolean isDir;
 

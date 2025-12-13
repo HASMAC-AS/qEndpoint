@@ -67,7 +67,7 @@ public class MultiRoaringBitmap implements Closeable, ModifiableMultiLayerBitmap
 	 * @throws IOException io exception when loading
 	 */
 	public static MultiRoaringBitmap load(Path input) throws IOException {
-		try (InputStream stream = new BufferedInputStream(Files.newInputStream(input))) {
+		try (InputStream stream = new BufferedInputStream(Files.newInputStream(input), 4 * 1024 * 1024)) {
 			return load(stream);
 		}
 	}

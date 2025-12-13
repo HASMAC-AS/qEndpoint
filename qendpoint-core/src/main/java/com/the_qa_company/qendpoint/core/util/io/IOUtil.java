@@ -394,9 +394,9 @@ public class IOUtil {
 			con.connect();
 			input = con.getInputStream();
 		} else if (name.equals("-")) {
-			input = new BufferedInputStream(System.in);
+			input = new BufferedInputStream(System.in, 4 * 1024 * 1024);
 		} else {
-			input = new BufferedInputStream(new FileInputStream(fileName));
+			input = new BufferedInputStream(new FileInputStream(fileName), 4 * 1024 * 1024);
 		}
 		if (!skipHandled) {
 			input.skipNBytes(startLen);
@@ -615,7 +615,7 @@ public class IOUtil {
 	}
 
 	public static void decompressGzip(File src, File trgt) throws IOException {
-		try (InputStream in = new GZIPInputStream(new BufferedInputStream(new FileInputStream(src)))) {
+		try (InputStream in = new GZIPInputStream(new BufferedInputStream(new FileInputStream(src)), 4 * 1024 * 1024)) {
 			Files.copy(in, trgt.toPath());
 		}
 	}

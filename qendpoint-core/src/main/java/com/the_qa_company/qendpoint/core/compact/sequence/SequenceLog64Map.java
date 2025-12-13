@@ -162,7 +162,7 @@ public class SequenceLog64Map implements Sequence, Closeable {
 		// FIXME: Bug in the previous code, find what because it should be more
 		// efficient
 
-		CountInputStream in = new CountInputStream(new BufferedInputStream(new FileInputStream(f)));
+		CountInputStream in = new CountInputStream(new BufferedInputStream(new FileInputStream(f), 4 * 1024 * 1024));
 		IOUtil.skip(in, base + ((numwords - 1) * 8L));
 //		System.out.println("Last word starts at: "+in.getTotalBytes());
 		// Read only used bits from last entry (byte aligned, little endian)

@@ -29,6 +29,10 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -52,6 +56,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	private final int k;
 	private final boolean debugSleepKwayDict;
 	private final boolean quads;
+	private final long start = System.currentTimeMillis();
 	private final CompressionType compressionType;
 
 	public SectionCompressor(CloseSuppressPath baseFileName, AsyncIteratorFetcher<TripleString> source,
@@ -253,7 +258,10 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 			}
 
 			if (tripleID % 100_000 == 0) {
-				listener.notifyProgress(10, "reading triples " + tripleID);
+				// use start to measure how many triples are read per second
+				int triplesPerSecond = (int) (tripleID / ((System.currentTimeMillis() - start) / 1000.0));
+
+				listener.notifyProgress(10, "reading triples " + tripleID + " triples per second: " + triplesPerSecond);
 			}
 			// too much ram allowed?
 			if (subjects.size() == Integer.MAX_VALUE - 6) {
@@ -480,13 +488,53 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 		 * @throws InterruptedException interruption while waiting for the async
 		 *                              thread
 		 */
+
+		ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
+
 		public void compute(List<TripleFile> triples, boolean async) throws IOException, InterruptedException {
 			if (!async) {
-				computeSubject(triples, false);
-				computePredicate(triples, false);
-				computeObject(triples, false);
+
+				Future<?> subjectFuture = executorService.submit(() -> {
+					try {
+						computeSubject(triples, false);
+					} catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+				});
+				Future<?> predicateFuture = executorService.submit(() -> {
+					try {
+						computePredicate(triples, false);
+					} catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+				});
+				Future<?> objectFuture = executorService.submit(() -> {
+					try {
+						computeObject(triples, false);
+					} catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+				});
+				Future<?> graphFuture = null;
 				if (supportsGraph()) {
-					computeGraph(triples, false);
+					graphFuture = executorService.submit(() -> {
+						try {
+							computeGraph(triples, false);
+						} catch (IOException e) {
+							throw new RuntimeException(e);
+						}
+					});
+				}
+
+				try {
+					subjectFuture.get();
+					predicateFuture.get();
+					objectFuture.get();
+					if (graphFuture != null) {
+						graphFuture.get();
+					}
+				} catch (ExecutionException e) {
+					throw new IOException(e);
 				}
 			} else {
 

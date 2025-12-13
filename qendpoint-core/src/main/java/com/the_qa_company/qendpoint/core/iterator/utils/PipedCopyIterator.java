@@ -1,10 +1,11 @@
 package com.the_qa_company.qendpoint.core.iterator.utils;
 
+import org.jctools.queues.SpscArrayQueue;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Objects;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.function.Function;
 
 /**
@@ -110,7 +111,10 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 		}
 	}
 
-	private final ArrayBlockingQueue<QueueObject<T>> queue = new ArrayBlockingQueue<>(16);
+	private final SpscArrayQueue<QueueObject<T>> queue1 = new SpscArrayQueue<>(16);
+	private final SpscArrayQueue<QueueObject<T>> queue2 = new SpscArrayQueue<>(16);
+	private final SpscArrayQueue<QueueObject<T>> activeReadQueue = queue1;
+	private final SpscArrayQueue<QueueObject<T>> activeWriteQueue = queue1;
 
 	private T next;
 	private boolean end;
@@ -129,7 +133,16 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 
 		QueueObject<T> obj;
 		try {
-			obj = queue.take();
+			obj = activeReadQueue.poll();
+			int i = 0;
+			while (obj == null) {
+				Thread.onSpinWait();
+
+				if (i++ % 100000 == 0) {
+					changeUpQueues();
+				}
+				obj = activeReadQueue.poll();
+			}
 		} catch (InterruptedException e) {
 			throw new PipedIteratorException("Can't read pipe", e);
 		}
@@ -159,10 +172,14 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 		closePipe(null);
 	}
 
+	boolean closed = false;
+
 	public void closePipe(Throwable e) {
+		closed = true;
 		if (e != null) {
 			// clear the queue to force the exception
-			queue.clear();
+			queue1.clear();
+			queue2.clear();
 			if (e instanceof PipedIteratorException) {
 				this.exception = (PipedIteratorException) e;
 			} else {
@@ -170,7 +187,15 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 			}
 		}
 		try {
-			queue.put(new EndQueueObject());
+			boolean offer = activeWriteQueue.offer(new EndQueueObject());
+			int i = 0;
+			while (!offer) {
+				Thread.onSpinWait();
+				if (i++ % 100000 == 0) {
+					changeUpQueues();
+				}
+				offer = activeWriteQueue.offer(new EndQueueObject());
+			}
 		} catch (InterruptedException ee) {
 			throw new PipedIteratorException("Can't close pipe", ee);
 		}
@@ -198,12 +223,41 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 		return new MapIterator<>(this, mappingFunction);
 	}
 
+	Thread writer = null;
+
 	public void addElement(T node) {
+		writer = Thread.currentThread();
 		try {
-			queue.put(new ElementQueueObject(node));
+			ElementQueueObject elementQueueObject = new ElementQueueObject(node);
+			boolean offer = activeWriteQueue.offer(elementQueueObject);
+			int i = 0;
+			while (!offer) {
+				Thread.onSpinWait();
+
+				if (i++ % 100000 == 0) {
+					changeUpQueues();
+				}
+
+				offer = activeWriteQueue.offer(elementQueueObject);
+			}
+
 		} catch (InterruptedException ee) {
 			throw new PipedIteratorException("Can't add element to pipe", ee);
 		}
+	}
+
+	synchronized void changeUpQueues() throws InterruptedException {
+		if (Thread.interrupted()) {
+			Thread.currentThread().interrupt();
+			throw new InterruptedException();
+		}
+//		var write = activeWriteQueue;
+//		var read = activeReadQueue;
+//
+//		if (read.isEmpty() && !write.isEmpty()) {
+//			activeWriteQueue.drainTo(read);
+//			return;
+//		}
 	}
 
 	/**
@@ -224,6 +278,8 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 	 */
 	public void reset() {
 		this.end = false;
+//		if(queue1.peek().end()) queue1.poll();
+//		if(queue2.peek().end()) queue2.poll();
 	}
 
 	@Override

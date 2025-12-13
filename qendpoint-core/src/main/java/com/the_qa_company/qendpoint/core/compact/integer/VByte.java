@@ -18,17 +18,17 @@
 
 package com.the_qa_company.qendpoint.core.compact.integer;
 
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
-
 import com.the_qa_company.qendpoint.core.util.BitUtil;
 import com.the_qa_company.qendpoint.core.util.Mutable;
 import com.the_qa_company.qendpoint.core.util.io.BigByteBuffer;
 import com.the_qa_company.qendpoint.core.util.io.BigMappedByteBuffer;
 import com.the_qa_company.qendpoint.core.util.string.ReplazableString;
+
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 
 /**
  * Typical implementation of Variable-Byte encoding for integers. <a href=
@@ -81,15 +81,120 @@ public class VByte {
 		}
 	}
 
+//	public static void encode(OutputStream out, long value) throws IOException {
+//		if (value < 0) {
+//			throw new IllegalArgumentException("Only can encode VByte of positive values");
+//		}
+//		while (value > 127) {
+//			out.write((int) (value & 127));
+//			value >>>= 7;
+//		}
+//		out.write((int) (value | 0x80));
+//	}
+
 	public static void encode(OutputStream out, long value) throws IOException {
 		if (value < 0) {
 			throw new IllegalArgumentException("Only can encode VByte of positive values");
 		}
-		while (value > 127) {
-			out.write((int) (value & 127));
-			value >>>= 7;
+
+		// write long value as bytes, all bits at once
+
+		// --- value still contains the number you want to encode ---
+
+		if (value < 0x80) {
+			out.write((int) (value | 0x80));
+			return;
 		}
-		out.write((int) (value | 0x80));
+		if (value < 0x4000) {
+			out.write((int) (value & 0x7F));
+			out.write((int) ((value >> 7) | 0x80));
+			return;
+		}
+		if (value < 0x200000) {
+			out.write((int) (value & 0x7F));
+			out.write((int) ((value >> 7) & 0x7F));
+			out.write((int) ((value >> 14) | 0x80));
+			return;
+		}
+		if (value < 0x10000000) {
+			out.write((int) (value & 0x7F));
+			out.write((int) ((value >> 7) & 0x7F));
+			out.write((int) ((value >> 14) & 0x7F));
+			out.write((int) ((value >> 21) | 0x80));
+			return;
+		}
+
+		encodeLongWay(out, value);
+
+//		while (value > 127) {
+//			out.write((int) (value & 0x7F));
+//			value >>>= 7;
+//		}
+//		out.write((int) (value | 0x80));
+	}
+
+	private static void encodeLongWay(OutputStream out, long value) throws IOException {
+		// 1. How many bits are actually used in v? (1-64)
+		int bitLen = 64 - Long.numberOfLeadingZeros(value);
+
+// 2.  How many full 7-bit chunks precede the last byte? (0-8)
+		int extra = (bitLen - 1) / 7;
+
+// 3.  Emit those chunks — no loop, just a single jump:
+		switch (extra) {
+		case 8: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) & 0x7F),
+					(byte) ((value >> 21) & 0x7F), (byte) ((value >> 28) & 0x7F), (byte) ((value >> 35) & 0x7F),
+					(byte) ((value >> 42) & 0x7F), (byte) ((value >> 49) & 0x7F), (byte) ((value >> 56) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 7: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) & 0x7F),
+					(byte) ((value >> 21) & 0x7F), (byte) ((value >> 28) & 0x7F), (byte) ((value >> 35) & 0x7F),
+					(byte) ((value >> 42) & 0x7F), (byte) ((value >> 49) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 6: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) & 0x7F),
+					(byte) ((value >> 21) & 0x7F), (byte) ((value >> 28) & 0x7F), (byte) ((value >> 35) & 0x7F),
+					(byte) ((value >> 42) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 5: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) & 0x7F),
+					(byte) ((value >> 21) & 0x7F), (byte) ((value >> 28) & 0x7F), (byte) ((value >> 35) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 4: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) & 0x7F),
+					(byte) ((value >> 21) & 0x7F), (byte) ((value >> 28) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 3: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) & 0x7F),
+					(byte) ((value >> 21) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 2: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) & 0x7F), (byte) ((value >> 14) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 1: {
+			byte[] bytes = { (byte) (value & 0x7F), (byte) ((value >> 7) | 0x80) };
+			out.write(bytes);
+			break;
+		}
+		case 0:
+			out.write((int) (value | 0x80));
+			break;
+		}
 	}
 
 	/**
@@ -139,20 +244,22 @@ public class VByte {
 	public static long decode(ByteBuffer in) throws IOException {
 		long out = 0;
 		int shift = 0;
-		if (!in.hasRemaining())
+		if (!in.hasRemaining()) {
 			throw new EOFException();
+		}
 		byte readbyte = in.get();
 
 		while ((readbyte & 0x80) == 0) {
 			if (shift >= 50) { // We read more bytes than required to load the
-								// max long
+				// max long
 				throw new IllegalArgumentException("Read more bytes than required to load the max long");
 			}
 
 			out |= (readbyte & 127L) << shift;
 
-			if (!in.hasRemaining())
+			if (!in.hasRemaining()) {
 				throw new EOFException();
+			}
 			readbyte = in.get();
 
 			shift += 7;
@@ -161,23 +268,143 @@ public class VByte {
 		return out;
 	}
 
+//	public static long decode(InputStream in) throws IOException {
+//		long out = 0;
+//
+//		long readbyte = in.read();
+//		if (readbyte == -1) {
+//			throw new EOFException();
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127);
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//
+//			return out | (readbyte & 127);
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 7;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 7;
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 14;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 14;
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 21;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 21;
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 28;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 28;
+//
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 35;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 35;
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 42;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 42;
+//		}
+//
+//		if ((readbyte & 0x80) == 0) {
+//
+//			out |= (readbyte & 127) << 49;
+//
+//			readbyte = in.read();
+//			if (readbyte == -1) {
+//				throw new EOFException();
+//			}
+//
+//		} else {
+//			return out | (readbyte & 127) << 49;
+//		}
+//
+//		return out | (readbyte & 127) << 56;
+//
+//	}
+
 	public static long decode(BigMappedByteBuffer in) throws IOException {
 		long out = 0;
 		int shift = 0;
-		if (!in.hasRemaining())
+		if (!in.hasRemaining()) {
 			throw new EOFException();
+		}
 		byte readbyte = in.get();
 
 		while ((readbyte & 0x80) == 0) {
 			if (shift >= 50) { // We read more bytes than required to load the
-								// max long
+				// max long
 				throw new IllegalArgumentException("Read more bytes than required to load the max long");
 			}
 
 			out |= (readbyte & 127L) << shift;
 
-			if (!in.hasRemaining())
+			if (!in.hasRemaining()) {
 				throw new EOFException();
+			}
 			readbyte = in.get();
 
 			shift += 7;

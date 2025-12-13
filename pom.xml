@@ -63,10 +63,10 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.source.version>17</java.source.version>
-        <java.target.version>17</java.target.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <java.source.version>25</java.source.version>
+        <java.target.version>25</java.target.version>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
     </properties>
 
     <repositories>
@@ -212,6 +212,7 @@
         <module>qendpoint-cli</module>
         <module>qendpoint-backend</module>
         <module>qendpoint-store</module>
+        <module>qendpoint-benchmarks</module>
     </modules>
 
     <issueManagement>

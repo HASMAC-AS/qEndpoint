@@ -53,11 +53,11 @@ public class MultiThreadListenerConsole implements MultiThreadListener {
 
 	public MultiThreadListenerConsole(boolean color, boolean asciiListener) {
 		this.color = color || ALLOW_COLOR_SEQUENCE;
-		if (asciiListener) {
-			threadMessages = new TreeMap<>();
-		} else {
-			threadMessages = null;
-		}
+//		if (asciiListener) {
+		threadMessages = new TreeMap<>();
+//		} else {
+//			threadMessages = null;
+//		}
 	}
 
 	public String color(int r, int g, int b) {
@@ -140,7 +140,7 @@ public class MultiThreadListenerConsole implements MultiThreadListener {
 		String msg = colorReset() + progressBar(level) + colorReset() + " " + message;
 		if (threadMessages != null) {
 			threadMessages.put(thread, msg);
-			render();
+//			render();
 		} else {
 			System.out.println(colorReset() + "[" + colorThread() + thread + colorReset() + "]" + msg);
 		}
@@ -160,11 +160,30 @@ public class MultiThreadListenerConsole implements MultiThreadListener {
 		System.out.print(message);
 	}
 
+	{
+
+		Thread thread = new Thread(() -> {
+			while (true) {
+				try {
+					Thread.sleep(500);
+					render();
+				} catch (InterruptedException e) {
+					break;
+				}
+			}
+		});
+
+		thread.setDaemon(true);
+		thread.setName("MultiThreadListenerConsole");
+		thread.start();
+
+	}
+
 	private void render() {
 		render(null);
 	}
 
-	private void render(String ln) {
+	synchronized private void render(String ln) {
 		if (threadMessages == null) {
 			return;
 		}
@@ -173,11 +192,12 @@ public class MultiThreadListenerConsole implements MultiThreadListener {
 		message.append("\r");
 		// go back each line of the thread message
 
-		if (previous != 0) {
-			for (int i = 0; i < previous; i++) {
-				message.append(goBackNLine(1)).append(ERASE_LINE);
-			}
-		}
+//		if (previous != 0) {
+//			for (int i = 0; i < previous; i++) {
+//				message.append(goBackNLine(1)).append(ERASE_LINE);
+//			}
+//		}
+		message.append("\033[H\033[2J");
 
 		if (ln != null) {
 			message.append(ln).append("\n");
@@ -197,5 +217,6 @@ public class MultiThreadListenerConsole implements MultiThreadListener {
 		previous = lines;
 
 		System.out.print(message);
+		System.out.flush();
 	}
 }

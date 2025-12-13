@@ -331,15 +331,32 @@ public class PipedCopyIteratorUnordered<T> extends PipedCopyIterator<T> {
 		return new MapIterator<>(this, mappingFunction);
 	}
 
-	AtomicInteger index = new AtomicInteger(0);
+	static AtomicInteger index = new AtomicInteger(0);
+	static AtomicInteger index2 = new AtomicInteger(0);
+
+	static ThreadLocal<Integer> threadLocalIndexW = ThreadLocal.withInitial(() -> index.getAndIncrement());
+	static ThreadLocal<Integer> threadLocalIndexR = ThreadLocal.withInitial(() -> index2.getAndIncrement());
 
 	public void addElement(T node) {
-		int i = Thread.currentThread().hashCode();
+		int i = threadLocalIndexW.get();
 		int l = i % queue.length;
+		ArrayBlockingQueue<QueueObject<T>> queueObjects1 = queue[l];
 		try {
-			boolean success = queue[l].offer(new ElementQueueObject(node));
+//			System.out.println("Write: " + l);
+
+			if (queueObjects1 == focusQueue) {
+				for (ArrayBlockingQueue<QueueObject<T>> queueObjects : queue) {
+					if (queueObjects != focusQueue) {
+						queueObjects1 = queueObjects;
+						break;
+					}
+
+				}
+			}
+
+			boolean success = queueObjects1.offer(new ElementQueueObject(node));
 			if (!success) {
-				focusQueue = queue[l];
+				focusQueue = queueObjects1;
 				while (!success) {
 					for (ArrayBlockingQueue<QueueObject<T>> queueObjects : queue) {
 						success = queueObjects.offer(new ElementQueueObject(node), 1, TimeUnit.MILLISECONDS);
@@ -350,7 +367,9 @@ public class PipedCopyIteratorUnordered<T> extends PipedCopyIterator<T> {
 				}
 			}
 
-		} catch (InterruptedException ee) {
+		} catch (InterruptedException ee)
+
+		{
 			throw new PipedIteratorException("Can't add element to pipe", ee);
 		}
 	}

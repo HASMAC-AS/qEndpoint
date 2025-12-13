@@ -15,8 +15,9 @@ public class AsyncIteratorFetcherUnordered<E> extends AsyncIteratorFetcher<E> {
 
 	private static final int CORES = Runtime.getRuntime().availableProcessors();
 
-	public static final int BUFFER = 1024 * 4;
+	public static final int BUFFER = 1024 * 32;
 	private final Iterator<E> iterator;
+	private final PipedCopyIteratorUnordered<E> pipe;
 	private boolean end;
 	volatile Queue<E>[] queue = new Queue[CORES * 2];
 
@@ -29,6 +30,11 @@ public class AsyncIteratorFetcherUnordered<E> extends AsyncIteratorFetcher<E> {
 	public AsyncIteratorFetcherUnordered(Iterator<E> iterator) {
 		super(iterator);
 		this.iterator = iterator;
+		if (iterator instanceof PipedCopyIteratorUnordered<E>) {
+			this.pipe = ((PipedCopyIteratorUnordered<E>) iterator);
+		} else {
+			this.pipe = null;
+		}
 	}
 
 	/**

@@ -170,4 +170,37 @@ public class CompactString implements CharSequence, Serializable, ByteString {
 	public CharSequence getDelayed() {
 		return new DelayedString(this);
 	}
+
+//	@Override
+//	public int compareTo(ByteString other) {
+//		/* Fast paths first */
+//		if (other == this) { // identical object
+//			return 0;
+//		}
+//		if (!(other instanceof CompactString)) { // fall back to generic path
+//			return ByteString.super.compareTo(other);
+//		}
+//
+//		/* Same concrete type ⇒ compare the raw byte arrays */
+//		CompactString o = (CompactString) other;
+//		int len1 = length();
+//		int len2 = o.length();
+//		int min = Math.min(len1, len2);
+//
+//		// JDK 9+ intrinsic: vectorised/LVG search for the first mismatch
+//		int idx = Arrays.mismatch(this.data, 0, min, o.data, 0, min);
+//
+//		if (idx >= 0) { // found a differing byte
+//			// Use charAt only once; avoids the old per-iteration call cost
+//			return charAt(idx) - o.charAt(idx);
+//			/*
+//			 * If you know the bytes are ISO-8859-1 / ASCII, replace with:
+//			 * return (this.data[idx] & 0xFF) - (o.data[idx] & 0xFF); for an
+//			 * extra ~5–10 % speed-up.
+//			 */
+//		}
+//
+//		// All shared bytes equal; shorter string is “less”
+//		return len1 - len2;
+//	}
 }
