@@ -233,6 +233,35 @@ public class DictionaryFactory {
 		};
 	}
 
+	public static SectionCompressor createSectionCompressorPull(HDTOptions spec, CloseSuppressPath baseFileName,
+			MultiThreadListener listener, int bufferSize, long chunkSize, int k, boolean debugSleepKwayDict,
+			CompressionType compressionType) {
+		String name = spec.get(HDTOptionsKeys.DICTIONARY_TYPE_KEY, "");
+		boolean quad = isQuadDictionary(name);
+
+		return switch (name) {
+		case "", HDTOptionsKeys.DICTIONARY_TYPE_VALUE_FOUR_SECTION,
+				HDTOptionsKeys.DICTIONARY_TYPE_VALUE_FOUR_SECTION_BIG,
+				HDTOptionsKeys.DICTIONARY_TYPE_VALUE_FOUR_QUAD_SECTION ->
+			new SectionCompressor(baseFileName, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad,
+					compressionType);
+
+		case HDTOptionsKeys.DICTIONARY_TYPE_VALUE_MULTI_OBJECTS -> new MultiSectionSectionCompressor(baseFileName,
+				listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad, compressionType);
+
+		case HDTOptionsKeys.DICTIONARY_TYPE_VALUE_MULTI_OBJECTS_LANG,
+				HDTOptionsKeys.DICTIONARY_TYPE_VALUE_MULTI_OBJECTS_LANG_QUAD ->
+			new MultiSectionLangSectionCompressor(baseFileName, listener, bufferSize, chunkSize, k, debugSleepKwayDict,
+					quad, compressionType);
+
+		case HDTOptionsKeys.DICTIONARY_TYPE_VALUE_MULTI_OBJECTS_LANG_PREFIXES ->
+			new MultiSectionLangPrefixSectionCompressor(baseFileName, listener, bufferSize, chunkSize, k,
+					debugSleepKwayDict, quad, spec, compressionType);
+
+		default -> throw new IllegalFormatException("Implementation of section compressor not found for " + name);
+		};
+	}
+
 	/**
 	 * Creates a dictionary
 	 *

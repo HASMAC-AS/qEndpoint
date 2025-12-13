@@ -15,6 +15,12 @@ public class MultiSectionLangSectionCompressor extends SectionCompressor {
 		super(baseFileName, source, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad, compressionType);
 	}
 
+	public MultiSectionLangSectionCompressor(CloseSuppressPath baseFileName, MultiThreadListener listener,
+			int bufferSize, long chunkSize, int k, boolean debugSleepKwayDict, boolean quad,
+			CompressionType compressionType) {
+		super(baseFileName, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad, compressionType);
+	}
+
 	@Override
 	protected ByteString convertObject(CharSequence seq) {
 		// no need to create a new ByteString from it knowing it's already a new

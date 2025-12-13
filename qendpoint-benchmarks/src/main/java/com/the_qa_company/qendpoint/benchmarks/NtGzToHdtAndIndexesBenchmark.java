@@ -34,14 +34,17 @@ import java.util.concurrent.TimeUnit;
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @Fork(value = 1)
-@Warmup(iterations = 5)
-@Measurement(iterations = 5)
+@Warmup(iterations = 0)
+@Measurement(iterations = 20)
 public class NtGzToHdtAndIndexesBenchmark {
 
 	@State(Scope.Benchmark)
 	public static class BenchmarkState {
 		@Param({ "indexing/datagovbe-valid.nt.gz" })
 		public String ntGzPath;
+
+		@Param({ "true" })
+		public boolean ntSimpleParser;
 
 		@Param({ "http://example.org/#" })
 		public String baseUri;
@@ -78,6 +81,8 @@ public class NtGzToHdtAndIndexesBenchmark {
 			spec.set(HDTOptionsKeys.LOADER_TYPE_KEY, HDTOptionsKeys.LOADER_TYPE_VALUE_DISK);
 			spec.set(HDTOptionsKeys.LOADER_DISK_LOCATION_KEY, genWorkDir);
 			spec.set(HDTOptionsKeys.LOADER_DISK_FUTURE_HDT_LOCATION_KEY, outHdt);
+
+			spec.set(HDTOptionsKeys.NT_SIMPLE_PARSER_KEY, Boolean.toString(ntSimpleParser));
 
 			spec.set(HDTOptionsKeys.TRIPLE_ORDER_KEY, TripleComponentOrder.SPO);
 			spec.set(HDTOptionsKeys.BITMAPTRIPLES_INDEX_OTHERS, indexOrders);
@@ -161,7 +166,11 @@ public class NtGzToHdtAndIndexesBenchmark {
 			HDTManager.indexedHDT(hdt, ProgressListener.ignore(), spec);
 		}
 
-		return totalBytes(state.outHdt);
+		long l = totalBytes(state.outHdt);
+		if(l != 24585527){
+			throw new IllegalStateException("Unexpected total size: " + l);
+		}
+		return l;
 	}
 
 	private static long totalBytes(Path hdtPath) throws IOException {

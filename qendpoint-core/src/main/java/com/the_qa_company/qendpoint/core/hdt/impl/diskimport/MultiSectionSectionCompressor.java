@@ -19,6 +19,11 @@ public class MultiSectionSectionCompressor extends SectionCompressor {
 		super(baseFileName, source, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad, compressionType);
 	}
 
+	public MultiSectionSectionCompressor(CloseSuppressPath baseFileName, MultiThreadListener listener, int bufferSize,
+			long chunkSize, int k, boolean debugSleepKwayDict, boolean quad, CompressionType compressionType) {
+		super(baseFileName, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad, compressionType);
+	}
+
 	@Override
 	protected ByteString convertObject(CharSequence seq) {
 		return new CompactString(LiteralsUtils.litToPref(seq));

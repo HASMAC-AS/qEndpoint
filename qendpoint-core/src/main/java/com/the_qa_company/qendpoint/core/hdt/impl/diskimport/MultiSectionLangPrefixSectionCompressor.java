@@ -22,6 +22,14 @@ public class MultiSectionLangPrefixSectionCompressor extends SectionCompressor {
 		this.prefixes.loadConfig(spec.get(HDTOptionsKeys.LOADER_PREFIXES));
 	}
 
+	public MultiSectionLangPrefixSectionCompressor(CloseSuppressPath baseFileName, MultiThreadListener listener,
+			int bufferSize, long chunkSize, int k, boolean debugSleepKwayDict, boolean quad, HDTOptions spec,
+			CompressionType compressionType) {
+		super(baseFileName, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quad, compressionType);
+		this.prefixes = new PrefixesStorage();
+		this.prefixes.loadConfig(spec.get(HDTOptionsKeys.LOADER_PREFIXES));
+	}
+
 	@Override
 	protected ByteString convertObject(CharSequence seq) {
 		return LiteralsUtils.litToPrefLangCut(seq, prefixes);

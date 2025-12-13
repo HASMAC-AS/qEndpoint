@@ -10,10 +10,12 @@ import com.the_qa_company.qendpoint.core.util.io.compress.CompressNodeReader;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressUtil;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
+import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionFunction;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionThread;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMerger;
+import com.the_qa_company.qendpoint.core.util.concurrent.KWayMergerChunked;
 import com.the_qa_company.qendpoint.core.util.io.CloseSuppressPath;
 import com.the_qa_company.qendpoint.core.util.io.IOUtil;
 import com.the_qa_company.qendpoint.core.util.listener.IntermediateListener;
@@ -43,11 +45,13 @@ import java.util.function.Supplier;
  *
  * @author Antoine Willerval
  */
-public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString, SizeFetcher<TripleString>> {
+public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString, SizedSupplier<TripleString>>,
+		KWayMergerChunked.KWayMergerChunkedImpl<TripleString, SizedSupplier<TripleString>> {
 	private static final Logger log = LoggerFactory.getLogger(SectionCompressor.class);
 
 	private final CloseSuppressPath baseFileName;
-	private final AsyncIteratorFetcher<TripleString> source;
+	private final AsyncIteratorFetcher<TripleString> source; // may be null in
+																// pull-mode
 	private final MultiThreadListener listener;
 	private final AtomicLong triples = new AtomicLong();
 	private final AtomicLong ntRawSize = new AtomicLong();
@@ -71,6 +75,11 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 		this.debugSleepKwayDict = debugSleepKwayDict;
 		this.quads = quads;
 		this.compressionType = compressionType;
+	}
+
+	public SectionCompressor(CloseSuppressPath baseFileName, MultiThreadListener listener, int bufferSize,
+			long chunkSize, int k, boolean debugSleepKwayDict, boolean quads, CompressionType compressionType) {
+		this(baseFileName, null, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quads, compressionType);
 	}
 
 	/*
@@ -134,8 +143,12 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	 */
 	public CompressionResult compressToFile(int workers)
 			throws IOException, InterruptedException, KWayMerger.KWayMergerException {
+		if (source == null) {
+			throw new IllegalStateException(
+					"compressToFile(workers) requires a source; use compressPull(...) instead.");
+		}
 		// force to create the first file
-		KWayMerger<TripleString, SizeFetcher<TripleString>> merger = new KWayMerger<>(baseFileName, source, this,
+		KWayMerger<TripleString, SizedSupplier<TripleString>> merger = new KWayMerger<>(baseFileName, source, this,
 				Math.max(1, workers - 1), k);
 		merger.start();
 		// wait for the workers to merge the sections and create the triples
@@ -157,6 +170,9 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	 * @see #compress(int, String)
 	 */
 	public CompressionResult compressPartial() throws IOException, KWayMerger.KWayMergerException {
+		if (source == null) {
+			throw new IllegalStateException("compressPartial() requires a source; use compressPull(...) instead.");
+		}
 		List<TripleFile> files = new ArrayList<>();
 		baseFileName.closeWithDeleteRecurse();
 		try {
@@ -210,7 +226,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	}
 
 	@Override
-	public void createChunk(SizeFetcher<TripleString> fetcher, CloseSuppressPath output)
+	public void createChunk(SizedSupplier<TripleString> fetcher, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
 
 		listener.notifyProgress(0, "start reading triples");
@@ -341,8 +357,71 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	}
 
 	@Override
-	public SizeFetcher<TripleString> newStopFlux(Supplier<TripleString> flux) {
+	public SizedSupplier<TripleString> newStopFlux(Supplier<TripleString> flux) {
 		return SizeFetcher.ofTripleString(flux, chunkSize);
+	}
+
+	public CompressionResult compressPull(int workers, String mode,
+			ExceptionSupplier<SizedSupplier<TripleString>, IOException> chunkSupplier)
+			throws KWayMerger.KWayMergerException, IOException, InterruptedException {
+		if (mode == null) {
+			mode = "";
+		}
+
+		return switch (mode) {
+		case "", CompressionResult.COMPRESSION_MODE_COMPLETE -> compressToFilePull(workers, chunkSupplier);
+		case CompressionResult.COMPRESSION_MODE_PARTIAL -> compressPartialPull(chunkSupplier);
+		default -> throw new IllegalArgumentException("Unknown compression mode: " + mode);
+		};
+	}
+
+	public CompressionResult compressToFilePull(int workers,
+			ExceptionSupplier<SizedSupplier<TripleString>, IOException> chunkSupplier)
+			throws IOException, InterruptedException, KWayMerger.KWayMergerException {
+		KWayMergerChunked<TripleString, SizedSupplier<TripleString>> merger = new KWayMergerChunked<>(baseFileName,
+				chunkSupplier, this, Math.max(1, workers - 1), k);
+
+		merger.start();
+		Optional<CloseSuppressPath> sections = merger.waitResult();
+		if (sections.isEmpty()) {
+			return new CompressionResultEmpty();
+		}
+		return new CompressionResultFile(triples.get(), ntRawSize.get(), new TripleFile(sections.get(), false),
+				supportsGraph());
+	}
+
+	public CompressionResult compressPartialPull(
+			ExceptionSupplier<SizedSupplier<TripleString>, IOException> chunkSupplier)
+			throws IOException, KWayMerger.KWayMergerException {
+		List<TripleFile> files = new ArrayList<>();
+		baseFileName.closeWithDeleteRecurse();
+
+		try {
+			baseFileName.mkdirs();
+			long fileName = 0;
+
+			while (true) {
+				SizedSupplier<TripleString> chunk = chunkSupplier.get();
+				if (chunk == null) {
+					break;
+				}
+
+				TripleFile file = new TripleFile(baseFileName.resolve("chunk#" + fileName++), true);
+				createChunk(chunk, file.root);
+				files.add(file);
+			}
+		} catch (Throwable e) {
+			try {
+				throw e;
+			} finally {
+				try {
+					IOUtil.closeAll(files);
+				} finally {
+					baseFileName.close();
+				}
+			}
+		}
+		return new CompressionResultPartial(files, triples.get(), ntRawSize.get(), supportsGraph());
 	}
 
 	/**

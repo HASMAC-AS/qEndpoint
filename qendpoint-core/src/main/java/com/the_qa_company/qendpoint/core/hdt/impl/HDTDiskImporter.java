@@ -3,6 +3,7 @@ package com.the_qa_company.qendpoint.core.hdt.impl;
 import com.the_qa_company.qendpoint.core.dictionary.DictionaryFactory;
 import com.the_qa_company.qendpoint.core.dictionary.DictionaryPrivate;
 import com.the_qa_company.qendpoint.core.dictionary.impl.CompressFourSectionDictionary;
+import com.the_qa_company.qendpoint.core.enums.RDFNotation;
 import com.the_qa_company.qendpoint.core.enums.CompressionType;
 import com.the_qa_company.qendpoint.core.enums.TripleComponentOrder;
 import com.the_qa_company.qendpoint.core.exceptions.ParserException;
@@ -11,6 +12,7 @@ import com.the_qa_company.qendpoint.core.hdt.HDTVocabulary;
 import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.CompressTripleMapper;
 import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.CompressionResult;
 import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.MapOnCallHDT;
+import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.SectionCompressor;
 import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.TripleCompressionResult;
 import com.the_qa_company.qendpoint.core.header.HeaderPrivate;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
@@ -19,6 +21,7 @@ import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.listener.ProgressListener;
 import com.the_qa_company.qendpoint.core.options.HDTOptions;
 import com.the_qa_company.qendpoint.core.options.HDTOptionsKeys;
+import com.the_qa_company.qendpoint.core.rdf.parsers.NTriplesChunkedSource;
 import com.the_qa_company.qendpoint.core.triples.TempTriples;
 import com.the_qa_company.qendpoint.core.triples.TripleString;
 import com.the_qa_company.qendpoint.core.triples.TriplesPrivate;
@@ -34,6 +37,7 @@ import com.the_qa_company.qendpoint.core.util.listener.ListenerUtil;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
@@ -227,6 +231,58 @@ public class HDTDiskImporter implements Closeable {
 		return mapper;
 	}
 
+	public CompressTripleMapper compressDictionaryNTriples(InputStream ntOrNqStream, RDFNotation notation)
+			throws ParserException, IOException {
+		if (this.dict) {
+			throw new IllegalArgumentException("Dictionary already built! Use another importer instance!");
+		}
+
+		listener.notifyProgress(0,
+				"Sorting sections with chunk of size: " + StringUtil.humanReadableByteCount(chunkSize, true) + "B with "
+						+ ways + "ways and " + workers + " worker(s)");
+
+		profiler.pushSection("section compression");
+		CompressionResult compressionResult;
+		try (NTriplesChunkedSource chunked = new NTriplesChunkedSource(ntOrNqStream, notation, chunkSize)) {
+
+			SectionCompressor compressor = DictionaryFactory.createSectionCompressorPull(hdtFormat,
+					basePath.resolve("sectionCompression"), listener, bufferSize, chunkSize, 1 << ways,
+					hdtFormat.getBoolean("debug.disk.slow.stream2"), compressionType);
+
+			compressionResult = compressor.compressPull(workers, compressMode, chunked);
+
+		} catch (KWayMerger.KWayMergerException | InterruptedException e) {
+			throw new ParserException(e);
+		} finally {
+			profiler.popSection();
+		}
+
+		listener.unregisterAllThreads();
+		listener.notifyProgress(20, "Create sections and triple mapping");
+
+		profiler.pushSection("dictionary write");
+		// create sections and triple mapping
+		DictionaryPrivate dictionary = hdt.getDictionary();
+		CompressTripleMapper mapper = new CompressTripleMapper(basePath, compressionResult.getTripleCount(), chunkSize,
+				compressionResult.supportsGraph(),
+				compressionResult.supportsGraph() ? compressionResult.getGraphCount() : 0);
+		try (CompressFourSectionDictionary modifiableDictionary = new CompressFourSectionDictionary(compressionResult,
+				mapper, listener, debugHDTBuilding, compressionResult.supportsGraph())) {
+			dictionary.loadAsync(modifiableDictionary, listener);
+		} catch (InterruptedException e) {
+			throw new ParserException(e);
+		}
+		profiler.popSection();
+
+		// complete the mapper with the shared count and delete compression data
+		compressionResult.delete();
+		rawSize = compressionResult.getRawSize();
+		mapper.setShared(dictionary.getNshared());
+
+		this.dict = true;
+		return mapper;
+	}
+
 	/**
 	 * create the Triples of the HDT
 	 *
@@ -358,6 +414,13 @@ public class HDTDiskImporter implements Closeable {
 		compressTriples(mapper);
 		createHeader();
 
+		return convertToHDT();
+	}
+
+	public HDT runAllStepsNTriples(InputStream ntOrNqStream, RDFNotation notation) throws IOException, ParserException {
+		CompressTripleMapper mapper = compressDictionaryNTriples(ntOrNqStream, notation);
+		compressTriples(mapper);
+		createHeader();
 		return convertToHDT();
 	}
 
