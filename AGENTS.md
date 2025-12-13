@@ -251,6 +251,11 @@ Plan
 * \[in\_progress] add smallest failing test
 * \[todo] minimal root-cause fix
 * \[todo] rerun focused then module tests
+* \[todo] minimal root-cause fix
+* \[todo] rerun focused then module tests
+* \[todo] minimal root-cause fix
+* \[todo] rerun focused then module tests
+* \[todo] minimal root-cause fix
 * \[todo] format, verify, summary
 
 ````
@@ -588,7 +593,6 @@ Do **not** modify existing headers’ years.
 * **Files touched:** list file paths.
 * **Commands run:** key build/test commands.
 * **Verification:** which tests passed, where you checked reports.
-* **PIOSEE trace (concise):** P/I/O summary, selected option/routine, key evaluate outcomes.
 * **Evidence:**
   *Routine A:* failing output (pre‑fix) and passing output (post‑fix).
   *Routine B:* pre‑ and post‑green snippets from the **same selection** + **Hit Proof**.
