@@ -26,6 +26,8 @@ import com.the_qa_company.qendpoint.core.iterator.TriplePositionSupplier;
 import com.the_qa_company.qendpoint.core.triples.TripleID;
 import com.the_qa_company.qendpoint.core.compact.bitmap.AdjacencyList;
 
+import java.util.function.Consumer;
+
 /**
  * @author mario.arias
  */
@@ -34,6 +36,8 @@ public class BitmapTriplesIteratorZFOQ implements SuppliableIteratorTripleID {
 	protected final BitmapTriples triples;
 	protected final TripleID pattern;
 	protected final TripleID returnTriple;
+	private final Consumer<TripleID> swapPatternToOrder;
+	private final Consumer<TripleID> swapOrderToSpo;
 
 	protected AdjacencyList adjY, adjIndex;
 	protected long posIndex, minIndex, maxIndex;
@@ -45,9 +49,11 @@ public class BitmapTriplesIteratorZFOQ implements SuppliableIteratorTripleID {
 	public BitmapTriplesIteratorZFOQ(BitmapTriples triples, TripleID pattern) {
 		this.triples = triples;
 		this.pattern = new TripleID(pattern);
+		this.swapPatternToOrder = TripleOrderConvert.getSwapLambda(TripleComponentOrder.SPO, triples.order);
+		this.swapOrderToSpo = TripleOrderConvert.getSwapLambda(triples.order, TripleComponentOrder.SPO);
 		this.returnTriple = new TripleID();
 
-		TripleOrderConvert.swapComponentOrder(this.pattern, TripleComponentOrder.SPO, triples.order);
+		swapPatternToOrder.accept(this.pattern);
 		patZ = this.pattern.getObject();
 		if (patZ == 0 && (patY != 0 || this.pattern.getSubject() != 0)) {
 			throw new IllegalArgumentException("This structure is not meant to process this pattern");
@@ -128,7 +134,7 @@ public class BitmapTriplesIteratorZFOQ implements SuppliableIteratorTripleID {
 	protected void updateOutput() {
 		lastPosIndex = posIndex;
 		returnTriple.setAll(x, y, z);
-		TripleOrderConvert.swapComponentOrder(returnTriple, triples.order, TripleComponentOrder.SPO);
+		swapOrderToSpo.accept(returnTriple);
 	}
 
 	/*

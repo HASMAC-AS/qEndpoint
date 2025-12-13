@@ -26,6 +26,8 @@ import com.the_qa_company.qendpoint.core.iterator.TriplePositionSupplier;
 import com.the_qa_company.qendpoint.core.triples.TripleID;
 import com.the_qa_company.qendpoint.core.compact.bitmap.AdjacencyList;
 
+import java.util.function.Consumer;
+
 /**
  * Iterates over all Y components of a BitmapTriples. i.e. In SPO it would
  * iterate over all appearances of a predicate ?P?
@@ -38,6 +40,8 @@ public class BitmapTriplesIteratorY implements SuppliableIteratorTripleID {
 	private long lastPosZ, lastNextZ, lastNextY;
 	private final TripleID returnTriple;
 	private final long patY;
+	private final Consumer<TripleID> swapPatternToOrder;
+	private final Consumer<TripleID> swapOrderToSpo;
 
 	private final AdjacencyList adjY;
 	private final AdjacencyList adjZ;
@@ -47,10 +51,12 @@ public class BitmapTriplesIteratorY implements SuppliableIteratorTripleID {
 
 	public BitmapTriplesIteratorY(BitmapTriples triples, TripleID pattern) {
 		this.triples = triples;
+		this.swapPatternToOrder = TripleOrderConvert.getSwapLambda(TripleComponentOrder.SPO, triples.order);
+		this.swapOrderToSpo = TripleOrderConvert.getSwapLambda(triples.order, TripleComponentOrder.SPO);
 		TripleID pattern1 = new TripleID(pattern);
 		this.returnTriple = new TripleID();
 
-		TripleOrderConvert.swapComponentOrder(pattern1, TripleComponentOrder.SPO, triples.order);
+		swapPatternToOrder.accept(pattern1);
 		patY = pattern1.getPredicate();
 		if (patY == 0) {
 			throw new IllegalArgumentException("This structure is not meant to process this pattern");
@@ -67,7 +73,7 @@ public class BitmapTriplesIteratorY implements SuppliableIteratorTripleID {
 		lastNextZ = nextZ;
 		lastNextY = nextY;
 		returnTriple.setAll(x, y, z);
-		TripleOrderConvert.swapComponentOrder(returnTriple, triples.order, TripleComponentOrder.SPO);
+		swapOrderToSpo.accept(returnTriple);
 	}
 
 	/*

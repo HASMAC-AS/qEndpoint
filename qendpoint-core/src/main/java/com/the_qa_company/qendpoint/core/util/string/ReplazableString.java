@@ -165,22 +165,30 @@ public final class ReplazableString implements CharSequence, ByteString {
 	}
 
 	public void replace2(InputStream in, int pos) throws IOException {
-		used = pos;
+		int used = pos;
+
+		int length = buffer.length;
+		var buffer = this.buffer;
 
 		while (true) {
 			int value = in.read();
 			if (value == -1) {
+				this.used = used;
+				this.buffer = buffer;
 				throw new IllegalArgumentException(
 						"Was reading a string but stream ended before finding the null terminator");
 			}
 			if (value == 0) {
 				break;
 			}
-			if (used >= buffer.length) {
+			if (used >= length) {
 				buffer = Arrays.copyOf(buffer, buffer.length * 2);
+				length = buffer.length;
 			}
 			buffer[used++] = (byte) (value & 0xFF);
 		}
+		this.used = used;
+		this.buffer = buffer;
 	}
 
 	public int replace2(BigMappedByteBuffer buffer, long offset, int pos) {

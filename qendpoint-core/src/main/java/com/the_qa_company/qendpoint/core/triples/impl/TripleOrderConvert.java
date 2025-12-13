@@ -22,6 +22,8 @@ package com.the_qa_company.qendpoint.core.triples.impl;
 import com.the_qa_company.qendpoint.core.enums.TripleComponentOrder;
 import com.the_qa_company.qendpoint.core.triples.TripleID;
 
+import java.util.function.Consumer;
+
 /**
  * @author mario.arias
  */
@@ -57,34 +59,113 @@ public class TripleOrderConvert {
 			{ false, false, true, false, true, false }, { true, false, false, false, false, true },
 			{ false, false, true, false, true, false } };
 
+	private static final Consumer<TripleID> NO_SWAP = ignored -> {};
+
+	private static final Consumer<TripleID>[][] SWAP_LAMBDAS = createSwapLambdas();
+
 	private TripleOrderConvert() {
 	}
 
-	public static void swapComponentOrder(TripleID triple, TripleComponentOrder from, TripleComponentOrder to) {
+	public static Consumer<TripleID> getSwapLambda(TripleComponentOrder from, TripleComponentOrder to) {
 		if (from == to) {
-			return;
+			return NO_SWAP;
 		}
 		if (from == TripleComponentOrder.Unknown || to == TripleComponentOrder.Unknown) {
 			throw new IllegalArgumentException("Cannot swap Unknown Orders");
 		}
-		boolean swap1 = swap1tab[from.ordinal() - 1][to.ordinal() - 1];
-		boolean swap2 = swap2tab[from.ordinal() - 1][to.ordinal() - 1];
-		boolean swap3 = swap3tab[from.ordinal() - 1][to.ordinal() - 1];
+		return SWAP_LAMBDAS[from.ordinal()][to.ordinal()];
+	}
 
-		if (swap1) {
-			long tmp = triple.getSubject();
-			triple.setSubject(triple.getPredicate());
-			triple.setPredicate(tmp);
+	public static void swapComponentOrder(TripleID triple, TripleComponentOrder from, TripleComponentOrder to) {
+		getSwapLambda(from, to).accept(triple);
+	}
+
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private static Consumer<TripleID>[][] createSwapLambdas() {
+		Consumer<TripleID>[][] swapLambdas = new Consumer[TripleComponentOrder.values().length][TripleComponentOrder
+				.values().length];
+
+		for (TripleComponentOrder from : TripleComponentOrder.values()) {
+			for (TripleComponentOrder to : TripleComponentOrder.values()) {
+				if (from == TripleComponentOrder.Unknown || to == TripleComponentOrder.Unknown) {
+					swapLambdas[from.ordinal()][to.ordinal()] = NO_SWAP;
+				} else {
+					swapLambdas[from.ordinal()][to.ordinal()] = createSwapLambda(from, to);
+				}
+			}
 		}
-		if (swap2) {
-			long tmp = triple.getSubject();
-			triple.setSubject(triple.getObject());
-			triple.setObject(tmp);
+
+		return swapLambdas;
+	}
+
+	private static Consumer<TripleID> createSwapLambda(TripleComponentOrder from, TripleComponentOrder to) {
+		if (from == to) {
+			return NO_SWAP;
 		}
-		if (swap3) {
-			long tmp = triple.getPredicate();
-			triple.setPredicate(triple.getObject());
-			triple.setObject(tmp);
+
+		int fromIndex = from.ordinal() - 1;
+		int toIndex = to.ordinal() - 1;
+
+		int swaps = 0;
+		if (swap1tab[fromIndex][toIndex]) {
+			swaps |= 1;
 		}
+		if (swap2tab[fromIndex][toIndex]) {
+			swaps |= 1 << 1;
+		}
+		if (swap3tab[fromIndex][toIndex]) {
+			swaps |= 1 << 2;
+		}
+
+		return switch (swaps) {
+		case 0 -> NO_SWAP;
+		case 1 -> TripleOrderConvert::swapSubjectPredicate;
+		case 2 -> TripleOrderConvert::swapSubjectObject;
+		case 3 -> TripleOrderConvert::swapSubjectPredicateAndObject;
+		case 4 -> TripleOrderConvert::swapPredicateObject;
+		case 5 -> TripleOrderConvert::swapSubjectPredicateThenPredicateObject;
+		case 6 -> TripleOrderConvert::swapSubjectObjectThenPredicateObject;
+		case 7 -> TripleOrderConvert::swapSubjectPredicateObject;
+		default -> throw new IllegalStateException("Unexpected swap pattern: " + swaps);
+		};
+	}
+
+	private static void swapSubjectPredicate(TripleID triple) {
+		long tmp = triple.getSubject();
+		triple.setSubject(triple.getPredicate());
+		triple.setPredicate(tmp);
+	}
+
+	private static void swapSubjectObject(TripleID triple) {
+		long tmp = triple.getSubject();
+		triple.setSubject(triple.getObject());
+		triple.setObject(tmp);
+	}
+
+	private static void swapPredicateObject(TripleID triple) {
+		long tmp = triple.getPredicate();
+		triple.setPredicate(triple.getObject());
+		triple.setObject(tmp);
+	}
+
+	private static void swapSubjectPredicateAndObject(TripleID triple) {
+		swapSubjectPredicate(triple);
+		swapSubjectObject(triple);
+	}
+
+	private static void swapSubjectPredicateThenPredicateObject(TripleID triple) {
+		swapSubjectPredicate(triple);
+		swapPredicateObject(triple);
+	}
+
+	private static void swapSubjectObjectThenPredicateObject(TripleID triple) {
+		swapSubjectObject(triple);
+		swapPredicateObject(triple);
+	}
+
+	private static void swapSubjectPredicateObject(TripleID triple) {
+		swapSubjectPredicate(triple);
+		swapSubjectObject(triple);
+		swapPredicateObject(triple);
 	}
 }

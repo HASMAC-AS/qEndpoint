@@ -25,6 +25,8 @@ import com.the_qa_company.qendpoint.core.iterator.SuppliableIteratorTripleID;
 import com.the_qa_company.qendpoint.core.triples.TripleID;
 import com.the_qa_company.qendpoint.core.compact.bitmap.AdjacencyList;
 
+import java.util.function.Consumer;
+
 /**
  * @author mario.arias
  */
@@ -41,11 +43,15 @@ public class BitmapTriplesIterator implements SuppliableIteratorTripleID {
 	protected long x, y, z;
 
 	protected final TripleComponentOrder order;
+	private final Consumer<TripleID> swapPatternToOrder;
+	private final Consumer<TripleID> swapOrderToSpo;
 
 	protected BitmapTriplesIterator(BitmapTriplesIndex idx, TripleID pattern, boolean search,
 			TripleComponentOrder order) {
 		this.idx = idx;
 		this.order = order;
+		this.swapPatternToOrder = TripleOrderConvert.getSwapLambda(TripleComponentOrder.SPO, order);
+		this.swapOrderToSpo = TripleOrderConvert.getSwapLambda(order, TripleComponentOrder.SPO);
 		this.returnTriple = new TripleID();
 		this.pattern = new TripleID();
 		if (search) {
@@ -68,6 +74,8 @@ public class BitmapTriplesIterator implements SuppliableIteratorTripleID {
 	public BitmapTriplesIterator(BitmapTriplesIndex idx, long minZ, long maxZ, TripleComponentOrder order) {
 		this.idx = idx;
 		this.order = order;
+		this.swapPatternToOrder = TripleOrderConvert.getSwapLambda(TripleComponentOrder.SPO, order);
+		this.swapOrderToSpo = TripleOrderConvert.getSwapLambda(order, TripleComponentOrder.SPO);
 		this.returnTriple = new TripleID();
 		this.pattern = new TripleID();
 		adjY = idx.getAdjacencyListY();
@@ -83,7 +91,7 @@ public class BitmapTriplesIterator implements SuppliableIteratorTripleID {
 	public void newSearch(TripleID pattern) {
 		this.pattern.assign(pattern);
 
-		TripleOrderConvert.swapComponentOrder(this.pattern, TripleComponentOrder.SPO, order);
+		swapPatternToOrder.accept(this.pattern);
 		patX = this.pattern.getSubject();
 		patY = this.pattern.getPredicate();
 		patZ = this.pattern.getObject();
@@ -100,7 +108,7 @@ public class BitmapTriplesIterator implements SuppliableIteratorTripleID {
 	protected void updateOutput() {
 		lastPosition = posZ;
 		returnTriple.setAll(x, y, z);
-		TripleOrderConvert.swapComponentOrder(returnTriple, order, TripleComponentOrder.SPO);
+		swapOrderToSpo.accept(returnTriple);
 	}
 
 	private void findRange() {
