@@ -240,8 +240,8 @@ public class HDTManagerImpl extends HDTManager {
 					opFile.getOptions().set("last-length", trueSize);
 					opFile.save();
 
-					listener.notifyProgress(0, "predownload " + rdfFileName + " into " + preDownload + " try #"
-							+ tryCount + " / preSize " + preSize);
+					listener.notifyProgress(0, "predownload {} into {} try #{} / preSize {}", rdfFileName, preDownload,
+							tryCount, preSize);
 
 					IOUtil.HTTPData readIs = IOUtil.getFileInputStreamData(rdfFileName, false, preSize);
 					long trueCurrSize = readIs.conn().getContentLengthLong();

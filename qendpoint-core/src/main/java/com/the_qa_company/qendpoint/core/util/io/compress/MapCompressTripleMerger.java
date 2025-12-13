@@ -147,7 +147,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 			throws KWayMerger.KWayMergerException {
 		BufferedTriples buffer = new BufferedTriples();
 		ParallelSortableArrayList<TripleID> tripleIDS = buffer.triples;
-		listener.notifyProgress(10, "reading triples part2  " + triplesCount);
+		listener.notifyProgress(10, "reading triples part2 {}", triplesCount.get());
 		TripleID next;
 		boolean quad = mapper.supportsGraph();
 		while ((next = flux.get()) != null) {
@@ -165,7 +165,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 			tripleIDS.add(mappedTriple);
 			long count = triplesCount.incrementAndGet();
 			if (count % 100_000 == 0) {
-				listener.notifyProgress(10, "reading triples part2 " + triplesCount);
+				listener.notifyProgress(10, "reading triples part2 {}", count);
 			}
 			if (tripleIDS.size() == Integer.MAX_VALUE - 6) {
 				break;
@@ -184,7 +184,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 				for (TripleID triple : tripleIDS) {
 					count++;
 					if (count % block == 0) {
-						il.notifyProgress(count / (block / 10f), "writing triples " + count + "/" + tripleIDS.size());
+						il.notifyProgress(count / (block / 10f), "writing triples {}/{}", count, tripleIDS.size());
 					}
 					if (prev.match(triple)) {
 						continue;
@@ -196,7 +196,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 					}
 					w.appendTriple(triple);
 				}
-				listener.notifyProgress(100, "writing completed " + triplesCount + " " + output.getFileName());
+				listener.notifyProgress(100, "writing completed {} {}", triplesCount.get(), output.getFileName());
 			}
 		} catch (IOException e) {
 			throw new KWayMerger.KWayMergerException(e);
@@ -207,7 +207,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	public void mergeChunks(List<CloseSuppressPath> inputs, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
 		try {
-			listener.notifyProgress(0, "merging triples " + output.getFileName());
+			listener.notifyProgress(0, "merging triples {}", output.getFileName());
 			CompressTripleReader[] readers = new CompressTripleReader[inputs.size()];
 			try {
 				for (int i = 0; i < inputs.size(); i++) {
@@ -225,7 +225,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 			} finally {
 				IOUtil.closeAll(readers);
 			}
-			listener.notifyProgress(100, "triples merged " + output.getFileName());
+			listener.notifyProgress(100, "triples merged {}", output.getFileName());
 			// delete old triples
 			IOUtil.closeAll(inputs);
 		} catch (IOException e) {

@@ -599,7 +599,7 @@ public class IOUtil {
 			int r = is.read(buffer, 0, buffer.length);
 
 			if (r < 0) {
-				pl.notifyProgress(100, "completed copy of " + StringUtil.humanReadableByteCount(total, true) + "B");
+				pl.notifyProgress(100, "completed copy of {}B", StringUtil.humanReadableByteCount(total, true));
 				return; // done
 			}
 
@@ -607,7 +607,7 @@ public class IOUtil {
 			total += r;
 			tmp += r;
 			if (tmp > split) {
-				pl.notifyProgress(25, "copy of " + StringUtil.humanReadableByteCount(total, true) + "B");
+				pl.notifyProgress(25, "copy of {}B", StringUtil.humanReadableByteCount(total, true));
 				tmp = 0;
 			}
 		}

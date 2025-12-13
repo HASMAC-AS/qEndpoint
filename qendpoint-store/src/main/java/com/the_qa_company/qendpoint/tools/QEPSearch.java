@@ -1041,8 +1041,8 @@ public class QEPSearch {
 				i++;
 				RDFDeltaFileParser.DeltaFileComponent comp = reader.next();
 
-				console.notifyProgress((float) (i * 1000 / size) / 10, "reading files " + i + "/" + size + ": "
-						+ console.color(2, 2, 2) + comp.fileName() + console.colorReset());
+				console.notifyProgress((float) (i * 1000 / size) / 10, "reading files {}/{}: {}{}{}", i, size,
+						console.color(2, 2, 2), comp.fileName(), console.colorReset());
 			}
 			if (i != size) {
 				console.printLine(console.color(5, 1, 1) + "Error, not everything was read: " + i + " != " + size + " "

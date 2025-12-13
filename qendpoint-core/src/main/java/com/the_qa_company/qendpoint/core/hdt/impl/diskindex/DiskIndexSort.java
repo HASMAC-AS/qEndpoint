@@ -58,7 +58,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizeFetche
 			pairs.add(pair);
 			long r = read.incrementAndGet();
 			if (r % 1_000_000 == 0) {
-				listener.notifyProgress(10, "reading pairs part " + r);
+				listener.notifyProgress(10, "reading pairs part {}", r);
 			}
 		}
 
@@ -75,11 +75,11 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizeFetche
 			// encode the size of the chunk
 			for (int i = 0; i < pairs.size(); i++) {
 				if (i % block == 0) {
-					il.notifyProgress(i / (block / 10f), "writing pair " + count + "/" + pairs.size());
+					il.notifyProgress(i / (block / 10f), "writing pair {}/{}", count, pairs.size());
 				}
 				w.append(pairs.get(i));
 			}
-			listener.notifyProgress(100, "writing completed " + pairs.size() + " " + output.getFileName());
+			listener.notifyProgress(100, "writing completed {} {}", pairs.size(), output.getFileName());
 		} catch (IOException e) {
 			throw new KWayMerger.KWayMergerException("Can't write chunk", e);
 		}
@@ -89,7 +89,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizeFetche
 	public void mergeChunks(List<CloseSuppressPath> inputs, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
 		try {
-			listener.notifyProgress(0, "merging pairs " + output.getFileName());
+			listener.notifyProgress(0, "merging pairs {}", output.getFileName());
 			PairReader[] readers = new PairReader[inputs.size()];
 			long count = 0;
 			try {
@@ -106,7 +106,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizeFetche
 					while (it.hasNext()) {
 						w.append(it.next());
 						if (count % block == 0) {
-							listener.notifyProgress(count / (block / 10f), "merging pairs " + count + "/" + size);
+							listener.notifyProgress(count / (block / 10f), "merging pairs {}/{}", count, size);
 						}
 						count++;
 					}
@@ -114,7 +114,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizeFetche
 			} finally {
 				IOUtil.closeAll(readers);
 			}
-			listener.notifyProgress(100, "pairs merged " + output.getFileName() + " " + count);
+			listener.notifyProgress(100, "pairs merged {} {}", output.getFileName(), count);
 			// delete old pairs
 			IOUtil.closeAll(inputs);
 		} catch (IOException e) {
@@ -139,7 +139,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizeFetche
 	 */
 	public ExceptionIterator<Pair, IOException> sort(int workers)
 			throws InterruptedException, IOException, KWayMerger.KWayMergerException {
-		listener.notifyProgress(0, "Pair sort asked in " + baseFileName.toAbsolutePath());
+		listener.notifyProgress(0, "Pair sort asked in {}", baseFileName.toAbsolutePath());
 		// force to create the first file
 		KWayMerger<Pair, SizeFetcher<Pair>> merger = new KWayMerger<>(baseFileName, source, this,
 				Math.max(1, workers - 1), k);

@@ -672,13 +672,13 @@ public class BitmapTriples implements TriplesPrivate, BitmapTriplesIndex {
 
 						// fill the sequence with the predicate id
 						if (index % block == 0) {
-							listener.notifyProgress(index / (block / 10f),
-									"writing bitmapIndexZ/indexZ " + index + "/" + size);
+							listener.notifyProgress(index / (block / 10f), "writing bitmapIndexZ/indexZ {}/{}", index,
+									size);
 						}
 						indexZ.set(index, y);
 						index++;
 					}
-					listener.notifyProgress(100, "indexZ completed " + index);
+					listener.notifyProgress(100, "indexZ completed {}", index);
 					bitmapIndexZ.set(index - 1, true);
 				} finally {
 					IOUtil.closeObject(sortedPairs);
@@ -704,13 +704,13 @@ public class BitmapTriples implements TriplesPrivate, BitmapTriplesIndex {
 				long val = seqY.get(i);
 
 				if (i % block == 0) {
-					listener.notifyProgress(i / (block / 10f), "writing predCount " + i + "/" + size);
+					listener.notifyProgress(i / (block / 10f), "writing predCount {}/{}", i, size);
 				}
 				// Increment
 				predCount.set(val - 1, predCount.get(val - 1) + 1);
 			}
 			predCount.trimToSize();
-			listener.notifyProgress(100, "predCount completed " + seqY.getNumberOfElements());
+			listener.notifyProgress(100, "predCount completed {}", seqY.getNumberOfElements());
 			log.info("Predicate count completed in {}", global.stopAndShow());
 			IOUtil.closeObject(this.bitmapIndexZ);
 		} catch (Throwable t) {

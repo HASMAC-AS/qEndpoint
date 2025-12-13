@@ -225,7 +225,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 			graph = null;
 		}
 
-		listener.notifyProgress(10, "reading triples " + triples.get());
+		listener.notifyProgress(10, "reading triples {}", triples.get());
 		TripleString next;
 		while ((next = fetcher.get()) != null) {
 
@@ -261,7 +261,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 				// use start to measure how many triples are read per second
 				int triplesPerSecond = (int) (tripleID / ((System.currentTimeMillis() - start) / 1000.0));
 
-				listener.notifyProgress(10, "reading triples " + tripleID + " triples per second: " + triplesPerSecond);
+				listener.notifyProgress(10, "reading triples {} triples per second: {}", tripleID, triplesPerSecond);
 			}
 			// too much ram allowed?
 			if (subjects.size() == Integer.MAX_VALUE - 6) {
@@ -314,7 +314,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 				subjects.clear();
 				predicates.clear();
 				objects.clear();
-				listener.notifyProgress(100, "section completed" + sections.root.getFileName().toString());
+				listener.notifyProgress(100, "section completed{}", sections.root.getFileName());
 			}
 		} catch (IOException e) {
 			throw new KWayMerger.KWayMergerException(e);
@@ -332,7 +332,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 				tripleFiles.add(new TripleFile(in, false));
 			}
 			sections.compute(tripleFiles, false);
-			listener.notifyProgress(100, "sections merged " + sections.root.getFileName());
+			listener.notifyProgress(100, "sections merged {}", sections.root.getFileName());
 			// delete old sections
 			IOUtil.closeAll(inputs);
 		} catch (IOException | InterruptedException e) {

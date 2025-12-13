@@ -203,7 +203,7 @@ public class QEPCoreMergeThread extends Thread {
 				Collection<WeightContext> cluster = findCluster(dss);
 
 				if (cluster.size() < clusterSize) {
-					listener.notifyProgress(100, "merge cluster too small " + cluster.size() + "/" + clusterSize);
+					listener.notifyProgress(100, "merge cluster too small {}/{}", cluster.size(), clusterSize);
 					continue; // the cluster isn't big enough
 				}
 

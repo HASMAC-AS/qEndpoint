@@ -131,8 +131,8 @@ public class HDTVerify {
 
 			if (countSh % 10_000 == 0) {
 				String str = cs.toString();
-				il.notifyProgress(100f * countSh / sizeSh, "Verify shared (" + countSh + "/" + sizeSh + "): "
-						+ colorTool.color(3, 3, 3) + (str.length() > 17 ? (str.substring(0, 17) + "...") : str));
+				il.notifyProgress(100f * countSh / sizeSh, "Verify shared ({}/{}): {}{}", countSh, sizeSh,
+						colorTool.color(3, 3, 3), str.length() > 17 ? (str.substring(0, 17) + "...") : str);
 			}
 		}
 		if (error)
@@ -159,8 +159,8 @@ public class HDTVerify {
 
 				if (countSu % 10_000 == 0) {
 					String str = cs.toString();
-					il.notifyProgress(100f * countSu / sizeSu, "Verify subject (" + countSu + "/" + sizeSu + "): "
-							+ colorTool.color(3, 3, 3) + (str.length() > 17 ? (str.substring(0, 17) + "...") : str));
+					il.notifyProgress(100f * countSu / sizeSu, "Verify subject ({}/{}): {}{}", countSu, sizeSu,
+							colorTool.color(3, 3, 3), str.length() > 17 ? (str.substring(0, 17) + "...") : str);
 				}
 			}
 		}
@@ -233,8 +233,8 @@ public class HDTVerify {
 			}
 
 			if (count % 10_000 == 0) {
-				il.notifyProgress(100f * count / size, "Verify (" + count + "/" + size + "): "
-						+ colorTool.color(3, 3, 3) + (str.length() > 17 ? (str.substring(0, 17) + "...") : str));
+				il.notifyProgress(100f * count / size, "Verify ({}/{}): {}{}", count, size, colorTool.color(3, 3, 3),
+						str.length() > 17 ? (str.substring(0, 17) + "...") : str);
 			}
 
 			prev.replace(charSeq);
@@ -296,8 +296,8 @@ public class HDTVerify {
 
 			if (count % 10_000 == 0) {
 				String str = ts1.toString();
-				il.notifyProgress(100f * count / size, "Verify (" + count + "/" + size + "): "
-						+ colorTool.color(3, 3, 3) + (str.length() > 17 ? (str.substring(0, 17) + "...") : str));
+				il.notifyProgress(100f * count / size, "Verify ({}/{}): {}{}", count, size, colorTool.color(3, 3, 3),
+						str.length() > 17 ? (str.substring(0, 17) + "...") : str);
 			}
 		}
 

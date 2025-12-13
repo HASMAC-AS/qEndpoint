@@ -58,7 +58,7 @@ public class CompressUtil {
 		long block = size < 10 ? 1 : size / 10;
 		while (it.hasNext()) {
 			if (listener != null && element % block == 0) {
-				listener.notifyProgress((float) (10 * element / block), "write section " + element + "/" + size);
+				listener.notifyProgress((float) (10 * element / block), "write section {}/{}", element, size);
 			}
 			writer.appendNode(it.next());
 			element++;
@@ -66,7 +66,7 @@ public class CompressUtil {
 		it.forEachRemaining(writer::appendNode);
 		writer.writeCRC();
 		if (listener != null) {
-			listener.notifyProgress(100, "section completed " + size + " nodes");
+			listener.notifyProgress(100, "section completed {} nodes", size);
 		}
 	}
 

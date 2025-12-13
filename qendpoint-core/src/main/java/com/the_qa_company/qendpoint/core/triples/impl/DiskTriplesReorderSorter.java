@@ -58,7 +58,7 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 			pairs.add(tid);
 			long r = read.incrementAndGet();
 			if (r % 1_000_000 == 0) {
-				listener.notifyProgress(10, "reading triple part " + r);
+				listener.notifyProgress(10, "reading triple part {}", r);
 			}
 		}
 
@@ -76,10 +76,10 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 			for (int i = 0; i < pairs.size(); i++) {
 				w.appendTriple(pairs.get(i));
 				if (i % block == 0) {
-					il.notifyProgress(i / (block / 10f), "writing triples " + count + "/" + pairs.size());
+					il.notifyProgress(i / (block / 10f), "writing triples {}/{}", count, pairs.size());
 				}
 			}
-			listener.notifyProgress(100, "writing completed " + pairs.size() + " " + output.getFileName());
+			listener.notifyProgress(100, "writing completed {} {}", pairs.size(), output.getFileName());
 		} catch (IOException e) {
 			throw new KWayMerger.KWayMergerException("Can't write chunk", e);
 		}
@@ -89,7 +89,7 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 	public void mergeChunks(List<CloseSuppressPath> inputs, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
 		try {
-			listener.notifyProgress(0, "merging triples " + output.getFileName());
+			listener.notifyProgress(0, "merging triples {}", output.getFileName());
 			CompressTripleReader[] readers = new CompressTripleReader[inputs.size()];
 			long count = 0;
 			try {
@@ -108,7 +108,7 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 					while (it.hasNext()) {
 						w.appendTriple(it.next());
 						if (count % block == 0) {
-							listener.notifyProgress(count / (block / 10f), "merging triples " + count + "/" + size);
+//							listener.notifyProgress(count / (block / 10f), "merging triples " + count + "/" + size);
 						}
 						count++;
 					}
@@ -116,7 +116,7 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 			} finally {
 				IOUtil.closeAll(readers);
 			}
-			listener.notifyProgress(100, "triples merged " + output.getFileName() + " " + count);
+//			listener.notifyProgress(100, "triples merged " + output.getFileName() + " " + count);
 			// delete old pairs
 			IOUtil.closeAll(inputs);
 		} catch (IOException e) {
@@ -131,7 +131,7 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 
 	public ExceptionIterator<TripleID, IOException> sort(int workers)
 			throws InterruptedException, IOException, KWayMerger.KWayMergerException {
-		listener.notifyProgress(0, "Triple sort asked in " + baseFileName.toAbsolutePath());
+		listener.notifyProgress(0, "Triple sort asked in {}", baseFileName.toAbsolutePath());
 		// force to create the first file
 		KWayMerger<TripleID, SizeFetcher<TripleID>> merger = new KWayMerger<>(baseFileName, source, this,
 				Math.max(1, workers - 1), k);

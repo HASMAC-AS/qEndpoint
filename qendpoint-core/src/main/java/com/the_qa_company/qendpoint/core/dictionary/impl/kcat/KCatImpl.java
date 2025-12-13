@@ -408,7 +408,7 @@ public class KCatImpl implements Closeable {
 					profiler.pushSection("save");
 					il.setRange(80, 90);
 					il.setPrefix("Save HDT: ");
-					il.notifyProgress(0, "save to " + futureLocationStr);
+					il.notifyProgress(0, "save to {}", futureLocationStr);
 					writeHDT.saveToHDT(futureLocationStr, il);
 					profiler.popSection();
 				}

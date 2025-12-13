@@ -97,7 +97,7 @@ public class IntermediateListener implements ProgressListener {
 	public void notifyProgress(float level, String message) {
 		if (child != null) {
 			float newlevel = min + level * (max - min) / 100;
-			child.notifyProgress(newlevel, prefix + message);
+			child.notifyProgress(newlevel, "{}{}", prefix, message);
 		}
 	}
 

@@ -123,9 +123,10 @@ class PredicateIndexArray implements PredicateIndex {
 				}
 			}
 			bitmap.set(triples.getSeqY().getNumberOfElements() - 1, true);
-			log.info("Predicate Bitmap in {}", st.stopAndShow());
+			String predicateBitmapTime = st.stopAndShow();
+			log.info("Predicate Bitmap in {}", predicateBitmapTime);
 			if (listener != null) {
-				listener.notifyProgress(100, "Predicate Bitmap in " + st);
+				listener.notifyProgress(100, "Predicate Bitmap in {}", predicateBitmapTime);
 			}
 			st.reset();
 		} finally {
