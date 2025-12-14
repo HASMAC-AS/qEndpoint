@@ -15,13 +15,14 @@ import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.MapOnCallHDT;
 import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.SectionCompressor;
 import com.the_qa_company.qendpoint.core.hdt.impl.diskimport.TripleCompressionResult;
 import com.the_qa_company.qendpoint.core.header.HeaderPrivate;
-import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
-import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcherUnordered;
+import com.the_qa_company.qendpoint.core.iterator.utils.FileTripleIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.IteratorChunkedSource;
 import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.listener.ProgressListener;
 import com.the_qa_company.qendpoint.core.options.HDTOptions;
 import com.the_qa_company.qendpoint.core.options.HDTOptionsKeys;
 import com.the_qa_company.qendpoint.core.rdf.parsers.NTriplesChunkedSource;
+import com.the_qa_company.qendpoint.core.triples.TripleID;
 import com.the_qa_company.qendpoint.core.triples.TempTriples;
 import com.the_qa_company.qendpoint.core.triples.TripleString;
 import com.the_qa_company.qendpoint.core.triples.TriplesPrivate;
@@ -192,14 +193,14 @@ public class HDTDiskImporter implements Closeable {
 				"Sorting sections with chunk of size: " + StringUtil.humanReadableByteCount(chunkSize, true) + "B with "
 						+ ways + "ways and " + workers + " worker(s)");
 
-		AsyncIteratorFetcherUnordered<TripleString> source = new AsyncIteratorFetcherUnordered<>(iterator);
-
 		profiler.pushSection("section compression");
 		CompressionResult compressionResult;
-		try {
-			compressionResult = DictionaryFactory.createSectionCompressor(hdtFormat,
-					basePath.resolve("sectionCompression"), source, listener, bufferSize, chunkSize, 1 << ways,
-					hdtFormat.getBoolean("debug.disk.slow.stream2"), compressionType).compress(workers, compressMode);
+		try (IteratorChunkedSource<TripleString> chunkSource = IteratorChunkedSource.of(iterator,
+				FileTripleIterator::estimateSize, chunkSize, TripleString::new)) {
+			compressionResult = DictionaryFactory.createSectionCompressorPull(hdtFormat,
+					basePath.resolve("sectionCompression"), listener, bufferSize, chunkSize, 1 << ways,
+					hdtFormat.getBoolean("debug.disk.slow.stream2"), compressionType)
+					.compressPull(workers, compressMode, chunkSource);
 		} catch (KWayMerger.KWayMergerException | InterruptedException e) {
 			throw new ParserException(e);
 		}
@@ -301,11 +302,15 @@ public class HDTDiskImporter implements Closeable {
 		TripleComponentOrder order = triples.getOrder();
 		profiler.pushSection("triple compression/map");
 		try {
-			MapCompressTripleMerger tripleMapper = new MapCompressTripleMerger(basePath.resolve("tripleMapper"),
-					new AsyncIteratorFetcher<>(TripleGenerator.of(mapper.getTripleCount(), mapper.supportsGraph())),
-					mapper, listener, order, bufferSize, chunkSize, 1 << ways,
-					mapper.supportsGraph() ? mapper.getGraphsCount() : 0);
-			tripleCompressionResult = tripleMapper.merge(workers, compressMode);
+			long tripleIdSize = mapper.supportsGraph() ? 4L * Long.BYTES : 3L * Long.BYTES;
+			try (IteratorChunkedSource<TripleID> chunkSource = IteratorChunkedSource.of(
+					TripleGenerator.of(mapper.getTripleCount(), mapper.supportsGraph()), ignored -> tripleIdSize,
+					chunkSize, null)) {
+				MapCompressTripleMerger tripleMapper = new MapCompressTripleMerger(basePath.resolve("tripleMapper"),
+						mapper, listener, order, bufferSize, chunkSize, 1 << ways,
+						mapper.supportsGraph() ? mapper.getGraphsCount() : 0);
+				tripleCompressionResult = tripleMapper.mergePull(workers, compressMode, chunkSource);
+			}
 		} catch (KWayMerger.KWayMergerException | InterruptedException e) {
 			throw new ParserException(e);
 		}

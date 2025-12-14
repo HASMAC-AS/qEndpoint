@@ -377,8 +377,6 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 			}
 			sections.compute(tripleFiles, false);
 			listener.notifyProgress(100, "sections merged {}", sections.root.getFileName());
-			// delete old sections
-			IOUtil.closeAll(inputs);
 		} catch (IOException | InterruptedException e) {
 			throw new KWayMerger.KWayMergerException(e);
 		}

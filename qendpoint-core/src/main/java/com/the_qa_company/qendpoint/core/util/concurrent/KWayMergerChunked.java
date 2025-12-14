@@ -153,12 +153,34 @@ public class KWayMergerChunked<E, S extends Supplier<E>> {
 			List<CloseSuppressPath> paths = chunks.stream().map(Chunk::getPath)
 					.collect(Collectors.toUnmodifiableList());
 
-			impl.mergeChunks(paths, mergeOut);
-
+			KWayMergerException mergeException = null;
+			RuntimeException runtimeException = null;
+			Error error = null;
 			try {
-				IOUtil.closeAll(paths);
-			} catch (IOException e) {
-				throw new KWayMergerException("Can't close end merge files", e);
+				impl.mergeChunks(paths, mergeOut);
+			} catch (KWayMergerException e) {
+				mergeException = e;
+				throw e;
+			} catch (RuntimeException e) {
+				runtimeException = e;
+				throw e;
+			} catch (Error e) {
+				error = e;
+				throw e;
+			} finally {
+				try {
+					IOUtil.closeAll(paths);
+				} catch (IOException closeException) {
+					if (mergeException != null) {
+						mergeException.addSuppressed(closeException);
+					} else if (runtimeException != null) {
+						runtimeException.addSuppressed(closeException);
+					} else if (error != null) {
+						error.addSuppressed(closeException);
+					} else {
+						throw new KWayMergerException("Can't close end merge files", closeException);
+					}
+				}
 			}
 
 			dataLock.lock();
@@ -246,6 +268,12 @@ public class KWayMergerChunked<E, S extends Supplier<E>> {
 	public interface KWayMergerChunkedImpl<E, S extends Supplier<E>> {
 		void createChunk(S flux, CloseSuppressPath output) throws KWayMergerException;
 
+		/**
+		 * Merge chunks together into a new chunk.
+		 * <p>
+		 * Note: the merger owns the lifecycle of {@code inputs}.
+		 * Implementations must not close/delete the input paths.
+		 */
 		void mergeChunks(List<CloseSuppressPath> inputs, CloseSuppressPath output) throws KWayMergerException;
 	}
 }

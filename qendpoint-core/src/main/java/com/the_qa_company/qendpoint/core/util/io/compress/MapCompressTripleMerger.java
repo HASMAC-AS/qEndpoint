@@ -14,7 +14,10 @@ import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
+import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
+import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMerger;
+import com.the_qa_company.qendpoint.core.util.concurrent.KWayMergerChunked;
 import com.the_qa_company.qendpoint.core.util.io.CloseSuppressPath;
 import com.the_qa_company.qendpoint.core.util.io.IOUtil;
 import com.the_qa_company.qendpoint.core.util.listener.IntermediateListener;
@@ -33,9 +36,11 @@ import java.util.function.Supplier;
  *
  * @author Antoine Willerval
  */
-public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<TripleID, SizeFetcher<TripleID>> {
+public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<TripleID, SizedSupplier<TripleID>>,
+		KWayMergerChunked.KWayMergerChunkedImpl<TripleID, SizedSupplier<TripleID>> {
 	private final CloseSuppressPath baseFileName;
-	private final AsyncIteratorFetcher<TripleID> source;
+	private final AsyncIteratorFetcher<TripleID> source; // may be null in
+															// pull-mode
 	private final CompressTripleMapper mapper;
 	private final MultiThreadListener listener;
 	private final TripleComponentOrder order;
@@ -59,6 +64,12 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 		this.graphs = graphs;
 	}
 
+	public MapCompressTripleMerger(CloseSuppressPath baseFileName, CompressTripleMapper mapper,
+			MultiThreadListener listener, TripleComponentOrder order, int bufferSize, long chunkSize, int k,
+			long graphs) {
+		this(baseFileName, null, mapper, listener, order, bufferSize, chunkSize, k, graphs);
+	}
+
 	/**
 	 * merge these triples into a file
 	 *
@@ -70,8 +81,11 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	 */
 	public TripleCompressionResult mergeToFile(int workers)
 			throws InterruptedException, IOException, KWayMerger.KWayMergerException {
+		if (source == null) {
+			throw new IllegalStateException("mergeToFile(workers) requires a source; use mergePull(...) instead.");
+		}
 		// force to create the first file
-		KWayMerger<TripleID, SizeFetcher<TripleID>> merger = new KWayMerger<>(baseFileName, source, this,
+		KWayMerger<TripleID, SizedSupplier<TripleID>> merger = new KWayMerger<>(baseFileName, source, this,
 				Math.max(1, workers - 1), k);
 		merger.start();
 		// wait for the workers to merge the sections and create the triples
@@ -89,6 +103,9 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	 * @throws IOException io error
 	 */
 	public TripleCompressionResult mergeToPartial() throws IOException, KWayMerger.KWayMergerException {
+		if (source == null) {
+			throw new IllegalStateException("mergeToPartial() requires a source; use mergePull(...) instead.");
+		}
 		List<CloseSuppressPath> files = new ArrayList<>();
 		try {
 			baseFileName.mkdirs();
@@ -143,7 +160,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	}
 
 	@Override
-	public void createChunk(SizeFetcher<TripleID> flux, CloseSuppressPath output)
+	public void createChunk(SizedSupplier<TripleID> flux, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
 		BufferedTriples buffer = new BufferedTriples();
 		ParallelSortableArrayList<TripleID> tripleIDS = buffer.triples;
@@ -226,16 +243,83 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 				IOUtil.closeAll(readers);
 			}
 			listener.notifyProgress(100, "triples merged {}", output.getFileName());
-			// delete old triples
-			IOUtil.closeAll(inputs);
 		} catch (IOException e) {
 			throw new KWayMerger.KWayMergerException(e);
 		}
 	}
 
 	@Override
-	public SizeFetcher<TripleID> newStopFlux(Supplier<TripleID> flux) {
-		return SizeFetcher.ofTripleLong(flux, chunkSize);
+	public SizedSupplier<TripleID> newStopFlux(Supplier<TripleID> flux) {
+		long elementSize = mapper.supportsGraph() ? 4L * Long.BYTES : 3L * Long.BYTES;
+		return SizeFetcher.of(flux, ignored -> elementSize, chunkSize);
+	}
+
+	public TripleCompressionResult mergePull(int workers, String mode,
+			ExceptionSupplier<SizedSupplier<TripleID>, IOException> chunkSupplier)
+			throws KWayMerger.KWayMergerException, InterruptedException, IOException {
+		if (mode == null) {
+			mode = "";
+		}
+		return switch (mode) {
+		case "", CompressionResult.COMPRESSION_MODE_COMPLETE -> mergeToFilePull(workers, chunkSupplier);
+		case CompressionResult.COMPRESSION_MODE_PARTIAL -> mergeToPartialPull(chunkSupplier);
+		default -> throw new IllegalArgumentException("Unknown compression mode: " + mode);
+		};
+	}
+
+	public TripleCompressionResult mergeToFilePull(int workers,
+			ExceptionSupplier<SizedSupplier<TripleID>, IOException> chunkSupplier)
+			throws InterruptedException, IOException, KWayMerger.KWayMergerException {
+		KWayMergerChunked<TripleID, SizedSupplier<TripleID>> merger = new KWayMergerChunked<>(baseFileName,
+				chunkSupplier, this, Math.max(1, workers - 1), k);
+		merger.start();
+		Optional<CloseSuppressPath> sections = merger.waitResult();
+		if (sections.isEmpty()) {
+			return new TripleCompressionResultEmpty(order);
+		}
+		return new TripleCompressionResultFile(triplesCount.get(), sections.get(), order, bufferSize, graphs);
+	}
+
+	public TripleCompressionResult mergeToPartialPull(
+			ExceptionSupplier<SizedSupplier<TripleID>, IOException> chunkSupplier)
+			throws IOException, KWayMerger.KWayMergerException {
+		List<CloseSuppressPath> files = new ArrayList<>();
+		baseFileName.closeWithDeleteRecurse();
+		try {
+			baseFileName.mkdirs();
+			baseFileName.closeWithDeleteRecurse();
+			long fileName = 0;
+
+			while (true) {
+				SizedSupplier<TripleID> chunk = chunkSupplier.get();
+				if (chunk == null) {
+					break;
+				}
+				CloseSuppressPath file = baseFileName.resolve("chunk#" + fileName++);
+				createChunk(chunk, file);
+				files.add(file);
+			}
+		} catch (Throwable e) {
+			try {
+				throw e;
+			} finally {
+				try {
+					IOUtil.closeAll(files);
+				} finally {
+					baseFileName.close();
+				}
+			}
+		}
+		return new TripleCompressionResultPartial(files, triplesCount.get(), order, bufferSize, graphs) {
+			@Override
+			public void close() throws IOException {
+				try {
+					super.close();
+				} finally {
+					baseFileName.close();
+				}
+			}
+		};
 	}
 
 	public static class BufferedTriples {

@@ -3,17 +3,19 @@ package com.the_qa_company.qendpoint.core.storage;
 import com.the_qa_company.qendpoint.core.compact.integer.VByte;
 import com.the_qa_company.qendpoint.core.compact.sequence.SequenceLog64Big;
 import com.the_qa_company.qendpoint.core.compact.sequence.SequenceLog64BigDisk;
-import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.FetcherExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.FetcherIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.IteratorChunkedSource;
 import com.the_qa_company.qendpoint.core.iterator.utils.MergeExceptionIterator;
-import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
+import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.BitUtil;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMerger;
+import com.the_qa_company.qendpoint.core.util.concurrent.KWayMergerChunked;
 import com.the_qa_company.qendpoint.core.util.disk.LongArray;
 import com.the_qa_company.qendpoint.core.util.io.CloseSuppressPath;
 import com.the_qa_company.qendpoint.core.util.io.Closer;
+import com.the_qa_company.qendpoint.core.util.io.IOUtil;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -85,8 +87,11 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 				int workers = runtime.availableProcessors();
 				long chunkSize = (long) ((runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory()))
 						/ (0.85 * workers));
-				KWayMerger<QEPMapIds, Supplier<QEPMapIds>> merger = new KWayMerger<>(arrSort,
-						new AsyncIteratorFetcher<>(iterator()), new Merger(chunkSize), workers, 16);
+				chunkSize = Math.max(1, chunkSize);
+				IteratorChunkedSource<QEPMapIds> chunkSource = IteratorChunkedSource.of(iterator(),
+						ids -> 2L * Long.BYTES, chunkSize, null);
+				KWayMergerChunked<QEPMapIds, SizedSupplier<QEPMapIds>> merger = new KWayMergerChunked<>(arrSort,
+						chunkSource, new MergerChunked(), workers, 16);
 				merger.start();
 
 				CloseSuppressPath output = merger.waitResult().orElse(null);
@@ -150,10 +155,11 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 		}
 	}
 
-	private record Merger(long chunkSize) implements KWayMerger.KWayMergerImpl<QEPMapIds, Supplier<QEPMapIds>> {
+	private record MergerChunked()
+			implements KWayMergerChunked.KWayMergerChunkedImpl<QEPMapIds, SizedSupplier<QEPMapIds>> {
 
 		@Override
-		public void createChunk(Supplier<QEPMapIds> flux, CloseSuppressPath output)
+		public void createChunk(SizedSupplier<QEPMapIds> flux, CloseSuppressPath output)
 				throws KWayMerger.KWayMergerException {
 			try (BufferedOutputStream stream = new BufferedOutputStream(Files.newOutputStream(output))) {
 				QEPMapIds ids;
@@ -203,16 +209,11 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 						VByte.encode(stream, 0);
 					}
 				} finally {
-					Closer.closeAll(inputs);
+					IOUtil.closeAll(pathInput);
 				}
 			} catch (IOException e) {
 				throw new KWayMerger.KWayMergerException(e);
 			}
-		}
-
-		@Override
-		public Supplier<QEPMapIds> newStopFlux(Supplier<QEPMapIds> flux) {
-			return SizeFetcher.of(flux, p -> 2 * Long.BYTES, chunkSize);
 		}
 	}
 
