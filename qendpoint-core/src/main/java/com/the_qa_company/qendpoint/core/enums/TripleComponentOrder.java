@@ -220,6 +220,22 @@ public enum TripleComponentOrder {
 		};
 	}
 
+	public TripleComponentOrder pairedYZ() {
+		return switch (this) {
+		case SPO -> SOP;
+		case SOP -> SPO;
+		case PSO -> POS;
+		case POS -> PSO;
+		case OSP -> OPS;
+		case OPS -> OSP;
+		default -> Unknown;
+		};
+	}
+
+	public boolean isPairedYZWith(TripleComponentOrder other) {
+		return other != null && pairedYZ() == other;
+	}
+
 	public TripleComponentRole getMapping(TripleComponentRole role) {
 		return switch (role) {
 		case SUBJECT -> getSubjectMapping();

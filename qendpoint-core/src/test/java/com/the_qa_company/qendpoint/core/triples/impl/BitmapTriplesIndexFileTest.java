@@ -7,6 +7,7 @@ import com.the_qa_company.qendpoint.core.hdt.HDT;
 import com.the_qa_company.qendpoint.core.hdt.HDTManager;
 import com.the_qa_company.qendpoint.core.hdt.HDTManagerTest;
 import com.the_qa_company.qendpoint.core.hdt.HDTVersion;
+import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.listener.ProgressListener;
 import com.the_qa_company.qendpoint.core.options.HDTOptions;
 import com.the_qa_company.qendpoint.core.options.HDTOptionsKeys;
@@ -19,6 +20,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -159,6 +161,97 @@ public class BitmapTriplesIndexFileTest extends AbstractMapMemoryTest {
 		assertBitmapTriplesIndexFileEquals(hdtPath, psoPath, psoPathOld);
 		assertBitmapTriplesIndexFileEquals(hdtPath, ospPath, ospPathOld);
 		assertBitmapTriplesIndexFileEquals(hdtPath, opsPath, opsPathOld);
+
+		PathUtils.deleteDirectory(root);
+	}
+
+	@Test
+	public void genIndexPairTest() throws Exception {
+		Path root = tempDir.newFolder().toPath();
+
+		HDTOptions spec = HDTOptions.of(HDTOptionsKeys.BITMAPTRIPLES_INDEX_NO_FOQ, true);
+		spec.set("debug.bitmaptriples.allowFastSort", true);
+
+		Path hdtPath = root.resolve("temp.hdt");
+
+		LargeFakeDataSetStreamSupplier supplier = LargeFakeDataSetStreamSupplier.createSupplierWithMaxTriples(5000, 10)
+				.withMaxLiteralSize(50).withMaxElementSplit(20);
+
+		supplier.createAndSaveFakeHDT(spec, hdtPath);
+
+		Path psoSingle = root.resolve("single.pso.idx");
+		Path posSingle = root.resolve("single.pos.idx");
+		Path psoPair = root.resolve("pair.pso.idx");
+		Path posPair = root.resolve("pair.pos.idx");
+
+		MultiThreadListener listener = MultiThreadListener.ofSingle(ProgressListener.ignore());
+
+		try (HDT hdt = HDTManager.mapHDT(hdtPath)) {
+			BitmapTriples triples = (BitmapTriples) hdt.getTriples();
+
+			BitmapTriplesIndexFile.generateIndex(triples, triples, psoSingle, TripleComponentOrder.PSO, spec, listener);
+
+			try (FileChannel ch = FileChannel.open(psoSingle, StandardOpenOption.READ);
+					BitmapTriplesIndex origin = BitmapTriplesIndexFile.map(psoSingle, ch, triples, false)) {
+				BitmapTriplesIndexFile.generateIndex(triples, origin, posSingle, TripleComponentOrder.POS, spec,
+						listener);
+			}
+
+			Method generator = BitmapTriplesIndexFile.class.getMethod("generateIndexPair", BitmapTriples.class,
+					BitmapTriplesIndex.class, Path.class, TripleComponentOrder.class, Path.class,
+					TripleComponentOrder.class, HDTOptions.class, MultiThreadListener.class);
+			generator.invoke(null, triples, triples, psoPair, TripleComponentOrder.PSO, posPair,
+					TripleComponentOrder.POS, spec, listener);
+
+			assertBitmapTriplesIndexFileEquals(hdtPath, psoSingle, psoPair);
+			assertBitmapTriplesIndexFileEquals(hdtPath, posSingle, posPair);
+		}
+
+		PathUtils.deleteDirectory(root);
+	}
+
+	@Test
+	public void genIndexPairFastSortFromPrimaryOriginTest() throws Exception {
+		Path root = tempDir.newFolder().toPath();
+
+		HDTOptions spec = HDTOptions.of(HDTOptionsKeys.BITMAPTRIPLES_INDEX_NO_FOQ, true);
+		spec.set("debug.bitmaptriples.allowFastSort", true);
+
+		Path hdtPath = root.resolve("temp.hdt");
+
+		LargeFakeDataSetStreamSupplier supplier = LargeFakeDataSetStreamSupplier.createSupplierWithMaxTriples(5000, 10)
+				.withMaxLiteralSize(50).withMaxElementSplit(20);
+
+		supplier.createAndSaveFakeHDT(spec, hdtPath);
+
+		Path psoExpected = root.resolve("expected.pso.idx");
+		Path posExpected = root.resolve("expected.pos.idx");
+		Path psoPair = root.resolve("pair-from-pso.pso.idx");
+		Path posPair = root.resolve("pair-from-pso.pos.idx");
+
+		MultiThreadListener listener = MultiThreadListener.ofSingle(ProgressListener.ignore());
+
+		try (HDT hdt = HDTManager.mapHDT(hdtPath)) {
+			BitmapTriples triples = (BitmapTriples) hdt.getTriples();
+
+			BitmapTriplesIndexFile.generateIndex(triples, triples, psoExpected, TripleComponentOrder.PSO, spec,
+					listener);
+
+			try (FileChannel ch = FileChannel.open(psoExpected, StandardOpenOption.READ);
+					BitmapTriplesIndex origin = BitmapTriplesIndexFile.map(psoExpected, ch, triples, false)) {
+				BitmapTriplesIndexFile.generateIndex(triples, origin, posExpected, TripleComponentOrder.POS, spec,
+						listener);
+			}
+
+			try (FileChannel ch = FileChannel.open(psoExpected, StandardOpenOption.READ);
+					BitmapTriplesIndex origin = BitmapTriplesIndexFile.map(psoExpected, ch, triples, false)) {
+				BitmapTriplesIndexFile.generateIndexPair(triples, origin, psoPair, TripleComponentOrder.PSO, posPair,
+						TripleComponentOrder.POS, spec, listener);
+			}
+
+			assertBitmapTriplesIndexFileEquals(hdtPath, psoExpected, psoPair);
+			assertBitmapTriplesIndexFileEquals(hdtPath, posExpected, posPair);
+		}
 
 		PathUtils.deleteDirectory(root);
 	}

@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.nio.ByteOrder;
@@ -41,7 +42,10 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 import static java.lang.String.format;
 
@@ -376,6 +380,330 @@ public class BitmapTriplesIndexFile implements BitmapTriplesIndex {
 			}
 			Closer.closeAll(sortedIds, bitY, bitZ, seqY, seqZ);
 
+		} catch (InterruptedException e) {
+			throw new InterruptedIOException(e.getMessage());
+		} catch (KWayMerger.KWayMergerException e) {
+			throw new IOException(e);
+		}
+	}
+
+	private static final class IndexBuilder implements Closeable {
+		private final TripleComponentOrder order;
+		private final ModifiableBitmap bitY;
+		private final ModifiableBitmap bitZ;
+		private final DynamicSequence seqY;
+		private final DynamicSequence seqZ;
+		private long lastX;
+		private long lastY;
+		private long lastZ;
+		private long numTriples;
+
+		private IndexBuilder(TripleComponentOrder order, Path workDir, int ySize, int zSize, long expectedTriples)
+				throws IOException {
+			this.order = order;
+			this.bitY = Bitmap64Big.disk(workDir.resolve("bity"), expectedTriples);
+			this.bitZ = Bitmap64Big.disk(workDir.resolve("bitZ"), expectedTriples);
+			this.seqY = new SequenceLog64BigDisk(workDir.resolve("seqy"), ySize, expectedTriples, false, true);
+			this.seqZ = new SequenceLog64BigDisk(workDir.resolve("seqz"), zSize, expectedTriples, false, true);
+		}
+
+		private void appendXYZ(long x, long y, long z, TripleID tidForError) throws IOException {
+			if (numTriples == 0) {
+				seqY.append(y);
+				seqZ.append(z);
+			} else if (lastX != x) {
+				if (x != lastX + 1) {
+					throw new IllegalFormatException("Upper level must be increasing and correlative: " + x + " != "
+							+ lastX + " + " + 1 + " for " + tidForError);
+				}
+
+				// X changed
+				bitY.append(true);
+				seqY.append(y);
+
+				bitZ.append(true);
+				seqZ.append(z);
+			} else if (y != lastY) {
+				if (y < lastY) {
+					throw new IllegalFormatException("Middle level must be increasing for each parent. " + tidForError);
+				}
+
+				// Y changed
+				bitY.append(false);
+				seqY.append(y);
+
+				bitZ.append(true);
+				seqZ.append(z);
+			} else {
+				if (z < lastZ) {
+					throw new IllegalFormatException("Lower level must be increasing for each parent. " + tidForError);
+				}
+
+				// Z changed
+				bitZ.append(false);
+				seqZ.append(z);
+			}
+
+			lastX = x;
+			lastY = y;
+			lastZ = z;
+			numTriples++;
+		}
+
+		private void finish() {
+			if (numTriples > 0) {
+				bitY.append(true);
+				bitZ.append(true);
+			}
+
+			seqY.aggressiveTrimToSize();
+			seqZ.trimToSize();
+		}
+
+		private void save(Path destination, BitmapTriples bitmapTriples, MultiThreadListener listener)
+				throws IOException {
+			try (BufferedOutputStream output = new BufferedOutputStream(Files.newOutputStream(destination))) {
+				output.write(MAGIC);
+				IOUtil.writeLong(output, signature(bitmapTriples));
+
+				IOUtil.writeSizedString(output, order.name(), listener);
+
+				seqY.save(output, listener);
+				bitY.save(output, listener);
+
+				seqZ.save(output, listener);
+				bitZ.save(output, listener);
+			}
+		}
+
+		@Override
+		public void close() throws IOException {
+			Closer.closeAll(bitY, bitZ, seqY, seqZ);
+		}
+	}
+
+	public static void generateIndexPair(BitmapTriples bitmapTriples, BitmapTriplesIndex origin, Path destinationA,
+			TripleComponentOrder orderA, Path destinationB, TripleComponentOrder orderB, HDTOptions spec,
+			MultiThreadListener mtlistener) throws IOException {
+		MultiThreadListener listener = MultiThreadListener.ofNullable(mtlistener);
+
+		if (orderA == null || orderB == null || orderA == TripleComponentOrder.Unknown
+				|| orderB == TripleComponentOrder.Unknown) {
+			throw new IllegalArgumentException("Order cannot be null/Unknown");
+		}
+		if (orderA == orderB) {
+			throw new IllegalArgumentException("Orders must be different");
+		}
+		if (orderA.getSubjectMapping() != orderB.getSubjectMapping()
+				|| orderA.getPredicateMapping() != orderB.getObjectMapping()
+				|| orderA.getObjectMapping() != orderB.getPredicateMapping()) {
+			throw new IllegalArgumentException("Orders must share the same leading key and be a Y/Z swap");
+		}
+
+		if (!spec.getBoolean("debug.bitmaptriples.allowFastSort", true)) {
+			throw new IllegalArgumentException("generateIndexPair requires debug.bitmaptriples.allowFastSort=true");
+		}
+
+		TripleComponentOrder primaryOrder;
+		Path primaryDestination;
+		TripleComponentOrder secondaryOrder;
+		Path secondaryDestination;
+		if (orderA.ordinal() < orderB.ordinal()) {
+			primaryOrder = orderA;
+			primaryDestination = destinationA;
+			secondaryOrder = orderB;
+			secondaryDestination = destinationB;
+		} else {
+			primaryOrder = orderB;
+			primaryDestination = destinationB;
+			secondaryOrder = orderA;
+			secondaryDestination = destinationA;
+		}
+
+		Path diskLocation;
+		if (bitmapTriples.diskSequence) {
+			diskLocation = bitmapTriples.diskSequenceLocation.createOrGetPath();
+		} else {
+			diskLocation = Files.createTempDirectory("bitmapTriples");
+		}
+
+		int workers = (int) spec.getInt(HDTOptionsKeys.BITMAPTRIPLES_DISK_WORKER_KEY,
+				Runtime.getRuntime()::availableProcessors);
+		if (workers <= 0) {
+			throw new IllegalArgumentException("Number of workers should be positive!");
+		}
+
+		long chunkSize = spec.getInt(HDTOptionsKeys.BITMAPTRIPLES_DISK_CHUNK_SIZE_KEY,
+				() -> BitmapTriples.getMaxChunkSizeDiskIndex(workers));
+		if (chunkSize < 0) {
+			throw new IllegalArgumentException("Negative chunk size!");
+		}
+
+		long maxFileOpenedLong = spec.getInt(HDTOptionsKeys.BITMAPTRIPLES_DISK_MAX_FILE_OPEN_KEY, 1024);
+		int maxFileOpened;
+		if (maxFileOpenedLong < 0 || maxFileOpenedLong > Integer.MAX_VALUE) {
+			throw new IllegalArgumentException("maxFileOpened should be positive!");
+		} else {
+			maxFileOpened = (int) maxFileOpenedLong;
+		}
+
+		long kwayLong = spec.getInt(HDTOptionsKeys.BITMAPTRIPLES_DISK_KWAY_KEY,
+				() -> Math.max(1, BitUtil.log2(maxFileOpened / workers)));
+		int k;
+		if (kwayLong <= 0 || kwayLong > Integer.MAX_VALUE) {
+			throw new IllegalArgumentException("kway can't be negative!");
+		} else {
+			k = 1 << ((int) kwayLong);
+		}
+
+		long bufferSizeLong = spec.getInt(HDTOptionsKeys.BITMAPTRIPLES_DISK_BUFFER_SIZE_KEY,
+				CloseSuppressPath.BUFFER_SIZE);
+		int bufferSize;
+		if (bufferSizeLong > Integer.MAX_VALUE - 5L || bufferSizeLong <= 0) {
+			throw new IllegalArgumentException("Buffer size can't be negative or bigger than the size of an array!");
+		} else {
+			bufferSize = (int) bufferSizeLong;
+		}
+
+		try (CloseSuppressPath workDir = CloseSuppressPath.of(diskLocation.resolve(
+				"triplesort-pair-" + primaryOrder.name().toLowerCase() + "-" + secondaryOrder.name().toLowerCase()))) {
+			workDir.mkdirs();
+			workDir.closeWithDeleteRecurse();
+
+			TripleComponentOrder oldOrder = origin.getOrder();
+			ExceptionIterator<TripleID, IOException> sortedIds = null;
+			IndexBuilder primaryBuilder = null;
+			IndexBuilder secondaryBuilder = null;
+
+			try {
+				boolean useFastSort = oldOrder.getSubjectMapping() == primaryOrder.getSubjectMapping();
+
+				int ss = BitUtil.log2(origin.getBitmapY().countOnes());
+				int ps = origin.getSeqY().sizeOf();
+				int os = origin.getSeqZ().sizeOf();
+
+				TripleID logTriple;
+				if (useFastSort) {
+					boolean shouldSwap = oldOrder != primaryOrder;
+					if (shouldSwap) {
+						sortedIds = SortGroupSubjectIterator.of(ExceptionIterator
+								.<TripleID, IOException>of(
+										new BitmapTriplesIterator(origin, new TripleID(), TripleComponentOrder.SPO))
+								.map(next -> {
+									TripleID v = next.clone();
+									v.setObject(next.getPredicate());
+									v.setPredicate(next.getObject());
+									return v;
+								}));
+					} else {
+						sortedIds = ExceptionIterator.<TripleID, IOException>of(
+								new BitmapTriplesIterator(origin, new TripleID(), TripleComponentOrder.SPO));
+					}
+					logTriple = new TripleID(ss, shouldSwap ? os : ps, shouldSwap ? ps : os);
+				} else {
+					origin = bitmapTriples;
+					oldOrder = origin.getOrder();
+
+					sortedIds = new DiskTriplesReorderSorter(workDir,
+							new AsyncIteratorFetcher<>(new MapIterator<>(
+									new BitmapTriplesIterator(origin, new TripleID()), TripleID::clone)),
+							listener, bufferSize, chunkSize, k, oldOrder, primaryOrder).sort(workers);
+
+					logTriple = new TripleID(ss, ps, os);
+					TripleOrderConvert.swapComponentOrder(logTriple, oldOrder, primaryOrder);
+				}
+
+				int ySizePrimary = (int) logTriple.getPredicate();
+				int zSizePrimary = (int) logTriple.getObject();
+
+				int ySizeSecondary = zSizePrimary;
+				int zSizeSecondary = ySizePrimary;
+
+				long count = bitmapTriples.getNumberOfElements();
+
+				Path primaryDir = workDir.resolve(primaryOrder.name().toLowerCase());
+				Path secondaryDir = workDir.resolve(secondaryOrder.name().toLowerCase());
+				Files.createDirectories(primaryDir);
+				Files.createDirectories(secondaryDir);
+
+				primaryBuilder = new IndexBuilder(primaryOrder, primaryDir, ySizePrimary, zSizePrimary, count);
+				secondaryBuilder = new IndexBuilder(secondaryOrder, secondaryDir, ySizeSecondary, zSizeSecondary,
+						count);
+
+				Comparator<TripleID> yzComparator = Comparator.comparingLong(TripleID::getPredicate)
+						.thenComparingLong(TripleID::getObject);
+
+				long currentX = -1;
+				List<TripleID> secondaryGroup = new ArrayList<>();
+
+				TripleID tid = null;
+				long numTriples = 0;
+
+				while (sortedIds.hasNext()) {
+					tid = sortedIds.next();
+
+					long x = tid.getSubject();
+					long y = tid.getPredicate();
+					long z = tid.getObject();
+
+					if (x == 0 || y == 0 || z == 0) {
+						throw new IllegalFormatException("None of the components of a triple can be null");
+					}
+
+					if (currentX != x) {
+						if (!secondaryGroup.isEmpty()) {
+							secondaryGroup.sort(yzComparator);
+							for (TripleID swappedTid : secondaryGroup) {
+								secondaryBuilder.appendXYZ(swappedTid.getSubject(), swappedTid.getPredicate(),
+										swappedTid.getObject(), swappedTid);
+							}
+							secondaryGroup.clear();
+						}
+						currentX = x;
+					}
+
+					try {
+						primaryBuilder.appendXYZ(x, y, z, tid);
+					} catch (RuntimeException e) {
+						throw new IOException(
+								"Error when compressing triples " + tid + " " + oldOrder + " -> " + primaryOrder, e);
+					}
+
+					secondaryGroup.add(new TripleID(x, z, y));
+
+					ListenerUtil.notifyCond(listener, "Converting to BitmapTriples", numTriples, numTriples, count);
+					numTriples++;
+				}
+
+				if (!secondaryGroup.isEmpty()) {
+					secondaryGroup.sort(yzComparator);
+					for (TripleID swappedTid : secondaryGroup) {
+						secondaryBuilder.appendXYZ(swappedTid.getSubject(), swappedTid.getPredicate(),
+								swappedTid.getObject(), swappedTid);
+					}
+				}
+
+				primaryBuilder.finish();
+				secondaryBuilder.finish();
+
+				assert primaryBuilder.numTriples == bitmapTriples.getNumberOfElements();
+				assert secondaryBuilder.numTriples == bitmapTriples.getNumberOfElements();
+
+				primaryBuilder.save(primaryDestination, bitmapTriples, listener);
+				secondaryBuilder.save(secondaryDestination, bitmapTriples, listener);
+			} catch (Throwable t) {
+				try {
+					Closer.closeAll(sortedIds, primaryBuilder, secondaryBuilder);
+				} catch (Exception ex) {
+					t.addSuppressed(ex);
+				} catch (Throwable t2) {
+					t2.addSuppressed(t);
+					throw t2;
+				}
+				throw t;
+			}
+
+			Closer.closeAll(sortedIds, primaryBuilder, secondaryBuilder);
 		} catch (InterruptedException e) {
 			throw new InterruptedIOException(e.getMessage());
 		} catch (KWayMerger.KWayMergerException e) {

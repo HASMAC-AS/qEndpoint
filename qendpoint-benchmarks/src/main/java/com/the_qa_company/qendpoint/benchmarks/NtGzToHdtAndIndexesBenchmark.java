@@ -82,7 +82,8 @@ public class NtGzToHdtAndIndexesBenchmark {
 			spec.set(HDTOptionsKeys.LOADER_DISK_LOCATION_KEY, genWorkDir);
 			spec.set(HDTOptionsKeys.LOADER_DISK_FUTURE_HDT_LOCATION_KEY, outHdt);
 
-			spec.set(HDTOptionsKeys.NT_SIMPLE_PARSER_KEY, Boolean.toString(ntSimpleParser));
+			// spec.set(HDTOptionsKeys.NT_SIMPLE_PARSER_KEY,
+			// Boolean.toString(ntSimpleParser));
 
 			spec.set(HDTOptionsKeys.TRIPLE_ORDER_KEY, TripleComponentOrder.SPO);
 			spec.set(HDTOptionsKeys.BITMAPTRIPLES_INDEX_OTHERS, indexOrders);
@@ -167,7 +168,7 @@ public class NtGzToHdtAndIndexesBenchmark {
 		}
 
 		long l = totalBytes(state.outHdt);
-		if(l != 24585527){
+		if (l != 24585527) {
 			throw new IllegalStateException("Unexpected total size: " + l);
 		}
 		return l;
