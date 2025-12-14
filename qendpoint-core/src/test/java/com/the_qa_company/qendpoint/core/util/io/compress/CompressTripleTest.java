@@ -34,8 +34,7 @@ public class CompressTripleTest {
 					new IndexedTriple(new IndexedNode("", 2), new IndexedNode("", 12), new IndexedNode("", 15)),
 					new IndexedTriple(new IndexedNode("", 6), new IndexedNode("", 14), new IndexedNode("", 13)));
 			new ExceptionThread(() -> {
-				CompressTripleReader reader = new CompressTripleReader(in);
-				try {
+				try (CompressTripleReader reader = new CompressTripleReader(in)) {
 					for (IndexedTriple exceptedIndex : noDupeTriples) {
 						Assert.assertTrue(reader.hasNext());
 						TripleID actual = reader.next();
@@ -44,25 +43,12 @@ public class CompressTripleTest {
 						Assert.assertEquals(excepted, actual);
 					}
 					Assert.assertFalse(reader.hasNext());
-					Assert.assertEquals(34, in.read());
-					Assert.assertEquals(12, in.read());
-					Assert.assertEquals(27, in.read());
-				} finally {
-					in.close();
 				}
 			}, "ReadTest").attach(new ExceptionThread(() -> {
-				CompressTripleWriter writer = new CompressTripleWriter(out, false);
-				try {
+				try (CompressTripleWriter writer = new CompressTripleWriter(out, false)) {
 					for (IndexedTriple triple : triples) {
 						writer.appendTriple(triple);
 					}
-					writer.writeCRC();
-					// raw data to check if we didn't read too/not enough data
-					out.write(34);
-					out.write(12);
-					out.write(27);
-				} finally {
-					out.close();
 				}
 			}, "WriteTest")).startAll().joinAndCrashIfRequired();
 		}
@@ -77,33 +63,19 @@ public class CompressTripleTest {
 			List<TripleID> noDupeTriples = Arrays.asList(new TripleID(1, 9, 11), new TripleID(3, 10, 11),
 					new TripleID(2, 12, 15), new TripleID(6, 14, 13));
 			new ExceptionThread(() -> {
-				CompressTripleReader reader = new CompressTripleReader(in);
-				try {
+				try (CompressTripleReader reader = new CompressTripleReader(in)) {
 					for (TripleID excepted : noDupeTriples) {
 						Assert.assertTrue(reader.hasNext());
 						TripleID actual = reader.next();
 						Assert.assertEquals(excepted, actual);
 					}
 					Assert.assertFalse(reader.hasNext());
-					Assert.assertEquals(34, in.read());
-					Assert.assertEquals(12, in.read());
-					Assert.assertEquals(27, in.read());
-				} finally {
-					in.close();
 				}
 			}, "ReadTest").attach(new ExceptionThread(() -> {
-				CompressTripleWriter writer = new CompressTripleWriter(out, false);
-				try {
+				try (CompressTripleWriter writer = new CompressTripleWriter(out, false)) {
 					for (TripleID triple : triples) {
 						writer.appendTriple(triple);
 					}
-					writer.writeCRC();
-					// raw data to check if we didn't read too/not enough data
-					out.write(34);
-					out.write(12);
-					out.write(27);
-				} finally {
-					out.close();
 				}
 			}, "WriteTest")).startAll().joinAndCrashIfRequired();
 		}

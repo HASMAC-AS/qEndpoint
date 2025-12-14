@@ -6,6 +6,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import com.the_qa_company.qendpoint.core.util.Mutable;
 import com.the_qa_company.qendpoint.core.util.string.ReplazableString;
@@ -93,5 +95,46 @@ public class VByteTest {
 				assertNotEquals('\0', rs.charAt(j));
 			}
 		}
+	}
+
+	@Test
+	public void testDecodeUsesFastInput() throws IOException {
+		class FastIn extends InputStream implements VByte.FastInput {
+			@Override
+			public int read() {
+				throw new AssertionError("read() must not be called");
+			}
+
+			@Override
+			public long readVByteLong() {
+				return 123L;
+			}
+		}
+
+		assertEquals(123L, VByte.decode(new FastIn()));
+	}
+
+	@Test
+	public void testEncodeUsesFastOutput() throws IOException {
+		class FastOut extends OutputStream implements VByte.FastOutput {
+			private long value;
+			private int calls;
+
+			@Override
+			public void write(int b) {
+				throw new AssertionError("write(int) must not be called");
+			}
+
+			@Override
+			public void writeVByteLong(long value) {
+				this.value = value;
+				this.calls++;
+			}
+		}
+
+		FastOut out = new FastOut();
+		VByte.encode(out, 123L);
+		assertEquals(123L, out.value);
+		assertEquals(1, out.calls);
 	}
 }
