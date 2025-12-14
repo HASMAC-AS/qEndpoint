@@ -75,6 +75,7 @@ public class HDTDiskImporter implements Closeable {
 	private final long chunkSize;
 	private final int ways;
 	private final int workers;
+	private final int mergeConcurrency;
 	private final int bufferSize;
 	private final boolean mapHDT;
 	private final boolean debugHDTBuilding;
@@ -107,6 +108,11 @@ public class HDTDiskImporter implements Closeable {
 		if (workers <= 0) {
 			throw new IllegalArgumentException("Number of workers should be positive!");
 		}
+		long mergeConcurrencyLong = hdtFormat.getInt(HDTOptionsKeys.LOADER_DISK_MERGE_CONCURRENCY_KEY, workers);
+		if (mergeConcurrencyLong <= 0 || mergeConcurrencyLong > Integer.MAX_VALUE) {
+			throw new IllegalArgumentException("Number of merge workers should be positive!");
+		}
+		mergeConcurrency = (int) Math.min(workers, mergeConcurrencyLong);
 		// maximum size of a chunk
 		chunkSize = hdtFormat.getInt(HDTOptionsKeys.LOADER_DISK_CHUNK_SIZE_KEY, () -> getMaxChunkSize(this.workers));
 		if (chunkSize < 0) {
@@ -120,7 +126,7 @@ public class HDTDiskImporter implements Closeable {
 			maxFileOpened = (int) maxFileOpenedLong;
 		}
 		long kwayLong = hdtFormat.getInt(HDTOptionsKeys.LOADER_DISK_KWAY_KEY,
-				() -> Math.max(1, BitUtil.log2(maxFileOpened / this.workers)));
+				() -> Math.max(1, BitUtil.log2(maxFileOpened / this.mergeConcurrency)));
 		if (kwayLong <= 0 || kwayLong > Integer.MAX_VALUE) {
 			throw new IllegalArgumentException("kway can't be negative!");
 		} else {
@@ -191,7 +197,7 @@ public class HDTDiskImporter implements Closeable {
 		}
 		listener.notifyProgress(0,
 				"Sorting sections with chunk of size: " + StringUtil.humanReadableByteCount(chunkSize, true) + "B with "
-						+ ways + "ways and " + workers + " worker(s)");
+						+ ways + "ways and " + workers + " worker(s), merge concurrency: " + mergeConcurrency);
 
 		profiler.pushSection("section compression");
 		CompressionResult compressionResult;
@@ -308,7 +314,7 @@ public class HDTDiskImporter implements Closeable {
 					chunkSize, null)) {
 				MapCompressTripleMerger tripleMapper = new MapCompressTripleMerger(basePath.resolve("tripleMapper"),
 						mapper, listener, order, bufferSize, chunkSize, 1 << ways,
-						mapper.supportsGraph() ? mapper.getGraphsCount() : 0);
+						mapper.supportsGraph() ? mapper.getGraphsCount() : 0, mergeConcurrency);
 				tripleCompressionResult = tripleMapper.mergePull(workers, compressMode, chunkSource);
 			}
 		} catch (KWayMerger.KWayMergerException | InterruptedException e) {

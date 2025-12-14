@@ -3,17 +3,18 @@ package com.the_qa_company.qendpoint.core.triples.impl;
 import com.the_qa_company.qendpoint.core.enums.TripleComponentOrder;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.triples.TripleID;
+import com.the_qa_company.qendpoint.core.triples.TripleIDComparator;
 import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMerger;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMergerChunked;
 import com.the_qa_company.qendpoint.core.util.io.CloseSuppressPath;
 import com.the_qa_company.qendpoint.core.util.io.IOUtil;
-import com.the_qa_company.qendpoint.core.util.io.compress.CompressTripleMergeIterator;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressTripleReader;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressTripleWriter;
 import com.the_qa_company.qendpoint.core.util.listener.IntermediateListener;
@@ -58,7 +59,8 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 	@Override
 	public void createChunk(SizedSupplier<TripleID> flux, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
-		ParallelSortableArrayList<TripleID> pairs = new ParallelSortableArrayList<>(TripleID[].class);
+		int expectedCapacity = (int) Math.min(Integer.MAX_VALUE - 5L, Math.max(16L, chunkSize / (3L * Long.BYTES)));
+		ParallelSortableArrayList<TripleID> pairs = new ParallelSortableArrayList<>(TripleID[].class, expectedCapacity);
 
 		TripleID tid;
 		// loading the pairs
@@ -76,7 +78,6 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 		pairs.parallelSort(TripleID::compareTo);
 
 		// write the result on disk
-		int count = 0;
 		int block = pairs.size() < 10 ? 1 : pairs.size() / 10;
 		IntermediateListener il = new IntermediateListener(listener);
 		il.setRange(70, 100);
@@ -86,7 +87,7 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 			for (int i = 0; i < pairs.size(); i++) {
 				w.appendTriple(pairs.get(i));
 				if (i % block == 0) {
-					il.notifyProgress(i / (block / 10f), "writing triples {}/{}", count, pairs.size());
+					il.notifyProgress(i / (block / 10f), "writing triples {}/{}", i, pairs.size());
 				}
 			}
 			listener.notifyProgress(100, "writing completed {} {}", pairs.size(), output.getFileName());
@@ -108,8 +109,8 @@ public class DiskTriplesReorderSorter implements KWayMerger.KWayMergerImpl<Tripl
 				}
 
 				// use spo because we are writing xyz
-				ExceptionIterator<TripleID, IOException> it = CompressTripleMergeIterator.buildOfTree(readers,
-						TripleComponentOrder.SPO);
+				ExceptionIterator<TripleID, IOException> it = PriorityQueueMergeExceptionIterator
+						.merge(List.of(readers), TripleIDComparator.getComparator(TripleComponentOrder.SPO));
 				// at least one
 				long rSize = it.getSize();
 				long size = Math.max(rSize, 1);

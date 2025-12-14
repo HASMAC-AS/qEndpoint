@@ -13,6 +13,7 @@ import com.the_qa_company.qendpoint.core.triples.TripleIDComparator;
 import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -46,13 +48,21 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	private final TripleComponentOrder order;
 	private final int bufferSize;
 	private final int k;
+	private final int maxConcurrentMerges;
 	private final AtomicLong triplesCount = new AtomicLong();
+	private final ConcurrentHashMap<CloseSuppressPath, Long> tripleCountByFile = new ConcurrentHashMap<>();
 	private final long chunkSize;
 	private final long graphs;
 
 	public MapCompressTripleMerger(CloseSuppressPath baseFileName, AsyncIteratorFetcher<TripleID> source,
 			CompressTripleMapper mapper, MultiThreadListener listener, TripleComponentOrder order, int bufferSize,
 			long chunkSize, int k, long graphs) {
+		this(baseFileName, source, mapper, listener, order, bufferSize, chunkSize, k, graphs, Integer.MAX_VALUE);
+	}
+
+	public MapCompressTripleMerger(CloseSuppressPath baseFileName, AsyncIteratorFetcher<TripleID> source,
+			CompressTripleMapper mapper, MultiThreadListener listener, TripleComponentOrder order, int bufferSize,
+			long chunkSize, int k, long graphs, int maxConcurrentMerges) {
 		this.baseFileName = baseFileName;
 		this.source = source;
 		this.mapper = mapper;
@@ -62,12 +72,19 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 		this.chunkSize = chunkSize;
 		this.k = k;
 		this.graphs = graphs;
+		this.maxConcurrentMerges = maxConcurrentMerges <= 0 ? Integer.MAX_VALUE : maxConcurrentMerges;
 	}
 
 	public MapCompressTripleMerger(CloseSuppressPath baseFileName, CompressTripleMapper mapper,
 			MultiThreadListener listener, TripleComponentOrder order, int bufferSize, long chunkSize, int k,
 			long graphs) {
-		this(baseFileName, null, mapper, listener, order, bufferSize, chunkSize, k, graphs);
+		this(baseFileName, null, mapper, listener, order, bufferSize, chunkSize, k, graphs, Integer.MAX_VALUE);
+	}
+
+	public MapCompressTripleMerger(CloseSuppressPath baseFileName, CompressTripleMapper mapper,
+			MultiThreadListener listener, TripleComponentOrder order, int bufferSize, long chunkSize, int k,
+			long graphs, int maxConcurrentMerges) {
+		this(baseFileName, null, mapper, listener, order, bufferSize, chunkSize, k, graphs, maxConcurrentMerges);
 	}
 
 	/**
@@ -85,15 +102,18 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 			throw new IllegalStateException("mergeToFile(workers) requires a source; use mergePull(...) instead.");
 		}
 		// force to create the first file
+		int workerThreads = Math.max(1, workers - 1);
+		int mergeLimit = Math.min(workerThreads, maxConcurrentMerges);
 		KWayMerger<TripleID, SizedSupplier<TripleID>> merger = new KWayMerger<>(baseFileName, source, this,
-				Math.max(1, workers - 1), k);
+				workerThreads, k, mergeLimit);
 		merger.start();
 		// wait for the workers to merge the sections and create the triples
 		Optional<CloseSuppressPath> sections = merger.waitResult();
 		if (sections.isEmpty()) {
 			return new TripleCompressionResultEmpty(order);
 		}
-		return new TripleCompressionResultFile(triplesCount.get(), sections.get(), order, bufferSize, graphs);
+		long outputTripleCount = tripleCountByFile.getOrDefault(sections.get(), triplesCount.get());
+		return new TripleCompressionResultFile(outputTripleCount, sections.get(), order, bufferSize, graphs);
 	}
 
 	/**
@@ -127,7 +147,8 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 				}
 			}
 		}
-		return new TripleCompressionResultPartial(files, triplesCount.get(), order, bufferSize, graphs) {
+		long estimatedTripleCount = files.stream().mapToLong(f -> tripleCountByFile.getOrDefault(f, 0L)).sum();
+		return new TripleCompressionResultPartial(files, estimatedTripleCount, order, bufferSize, graphs) {
 			@Override
 			public void close() throws IOException {
 				try {
@@ -162,7 +183,9 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	@Override
 	public void createChunk(SizedSupplier<TripleID> flux, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
-		BufferedTriples buffer = new BufferedTriples();
+		long elementSize = mapper.supportsGraph() ? 4L * Long.BYTES : 3L * Long.BYTES;
+		int expectedCapacity = (int) Math.min(Integer.MAX_VALUE - 5L, Math.max(16L, chunkSize / elementSize));
+		BufferedTriples buffer = new BufferedTriples(expectedCapacity);
 		ParallelSortableArrayList<TripleID> tripleIDS = buffer.triples;
 		listener.notifyProgress(10, "reading triples part2 {}", triplesCount.get());
 		TripleID next;
@@ -198,6 +221,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 			try (CompressTripleWriter w = new CompressTripleWriter(output.openOutputStream(bufferSize), quad)) {
 				il.notifyProgress(0, "creating file");
 				TripleID prev = quad ? new TripleID(-1, -1, -1, -1) : new TripleID(-1, -1, -1);
+				long written = 0;
 				for (TripleID triple : tripleIDS) {
 					count++;
 					if (count % block == 0) {
@@ -212,7 +236,9 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 						prev.setAll(triple.getSubject(), triple.getPredicate(), triple.getObject());
 					}
 					w.appendTriple(triple);
+					written++;
 				}
+				tripleCountByFile.put(output, written);
 				listener.notifyProgress(100, "writing completed {} {}", triplesCount.get(), output.getFileName());
 			}
 		} catch (IOException e) {
@@ -233,11 +259,26 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 
 				try (CompressTripleWriter w = new CompressTripleWriter(output.openOutputStream(bufferSize),
 						mapper.supportsGraph())) {
-					ExceptionIterator<TripleID, IOException> it = CompressTripleMergeIterator.buildOfTree(readers,
-							order);
+					ExceptionIterator<TripleID, IOException> it = PriorityQueueMergeExceptionIterator
+							.merge(List.of(readers), TripleIDComparator.getComparator(order));
+					boolean quad = mapper.supportsGraph();
+					TripleID prev = quad ? new TripleID(-1, -1, -1, -1) : new TripleID(-1, -1, -1);
+					long written = 0;
 					while (it.hasNext()) {
-						w.appendTriple(it.next());
+						TripleID triple = it.next();
+						if (prev.match(triple)) {
+							continue;
+						}
+						if (quad) {
+							prev.setAll(triple.getSubject(), triple.getPredicate(), triple.getObject(),
+									triple.getGraph());
+						} else {
+							prev.setAll(triple.getSubject(), triple.getPredicate(), triple.getObject());
+						}
+						w.appendTriple(triple);
+						written++;
 					}
+					tripleCountByFile.put(output, written);
 				}
 			} finally {
 				IOUtil.closeAll(readers);
@@ -270,14 +311,17 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	public TripleCompressionResult mergeToFilePull(int workers,
 			ExceptionSupplier<SizedSupplier<TripleID>, IOException> chunkSupplier)
 			throws InterruptedException, IOException, KWayMerger.KWayMergerException {
+		int workerThreads = Math.max(1, workers - 1);
+		int mergeLimit = Math.min(workerThreads, maxConcurrentMerges);
 		KWayMergerChunked<TripleID, SizedSupplier<TripleID>> merger = new KWayMergerChunked<>(baseFileName,
-				chunkSupplier, this, Math.max(1, workers - 1), k);
+				chunkSupplier, this, workerThreads, k, mergeLimit);
 		merger.start();
 		Optional<CloseSuppressPath> sections = merger.waitResult();
 		if (sections.isEmpty()) {
 			return new TripleCompressionResultEmpty(order);
 		}
-		return new TripleCompressionResultFile(triplesCount.get(), sections.get(), order, bufferSize, graphs);
+		long outputTripleCount = tripleCountByFile.getOrDefault(sections.get(), triplesCount.get());
+		return new TripleCompressionResultFile(outputTripleCount, sections.get(), order, bufferSize, graphs);
 	}
 
 	public TripleCompressionResult mergeToPartialPull(
@@ -310,7 +354,8 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 				}
 			}
 		}
-		return new TripleCompressionResultPartial(files, triplesCount.get(), order, bufferSize, graphs) {
+		long estimatedTripleCount = files.stream().mapToLong(f -> tripleCountByFile.getOrDefault(f, 0L)).sum();
+		return new TripleCompressionResultPartial(files, estimatedTripleCount, order, bufferSize, graphs) {
 			@Override
 			public void close() throws IOException {
 				try {
@@ -323,9 +368,10 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	}
 
 	public static class BufferedTriples {
-		ParallelSortableArrayList<TripleID> triples = new ParallelSortableArrayList<>(TripleID[].class);
+		ParallelSortableArrayList<TripleID> triples;
 
-		private BufferedTriples() {
+		private BufferedTriples(int initialCapacity) {
+			triples = new ParallelSortableArrayList<>(TripleID[].class, initialCapacity);
 		}
 	}
 }

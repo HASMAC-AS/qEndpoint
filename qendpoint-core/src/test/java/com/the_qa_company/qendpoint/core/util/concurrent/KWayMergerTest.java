@@ -11,7 +11,6 @@ import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.MergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.util.io.CloseSuppressPath;
-import com.the_qa_company.qendpoint.core.util.io.IOUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -123,7 +122,6 @@ public class KWayMergerTest {
 								} catch (IOException e) {
 									throw new KWayMerger.KWayMergerException(e);
 								}
-								IOUtil.closeAll(inputs);
 							} catch (IOException e) {
 								throw new KWayMerger.KWayMergerException(e);
 							}

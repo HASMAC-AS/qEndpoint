@@ -3,11 +3,11 @@ package com.the_qa_company.qendpoint.core.hdt.impl.diskindex;
 import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
 import com.the_qa_company.qendpoint.core.util.io.compress.Pair;
-import com.the_qa_company.qendpoint.core.util.io.compress.PairMergeIterator;
 import com.the_qa_company.qendpoint.core.util.io.compress.PairReader;
 import com.the_qa_company.qendpoint.core.util.io.compress.PairWriter;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
@@ -58,7 +58,8 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizedSuppl
 
 	@Override
 	public void createChunk(SizedSupplier<Pair> flux, CloseSuppressPath output) throws KWayMerger.KWayMergerException {
-		ParallelSortableArrayList<Pair> pairs = new ParallelSortableArrayList<>(Pair[].class);
+		int expectedCapacity = (int) Math.min(Integer.MAX_VALUE - 5L, Math.max(16L, chunkSize / (3L * Long.BYTES)));
+		ParallelSortableArrayList<Pair> pairs = new ParallelSortableArrayList<>(Pair[].class, expectedCapacity);
 
 		Pair pair;
 		// loading the pairs
@@ -75,7 +76,6 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizedSuppl
 		pairs.parallelSort(comparator);
 
 		// write the result on disk
-		int count = 0;
 		int block = pairs.size() < 10 ? 1 : pairs.size() / 10;
 		IntermediateListener il = new IntermediateListener(listener);
 		il.setRange(70, 100);
@@ -84,7 +84,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizedSuppl
 			// encode the size of the chunk
 			for (int i = 0; i < pairs.size(); i++) {
 				if (i % block == 0) {
-					il.notifyProgress(i / (block / 10f), "writing pair {}/{}", count, pairs.size());
+					il.notifyProgress(i / (block / 10f), "writing pair {}/{}", i, pairs.size());
 				}
 				w.append(pairs.get(i));
 			}
@@ -106,7 +106,8 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizedSuppl
 					readers[i] = new PairReader(inputs.get(i).openInputStream(bufferSize));
 				}
 
-				ExceptionIterator<Pair, IOException> it = PairMergeIterator.buildOfTree(readers, comparator);
+				ExceptionIterator<Pair, IOException> it = PriorityQueueMergeExceptionIterator.merge(List.of(readers),
+						comparator);
 				// at least one
 				long rSize = it.getSize();
 				long size = Math.max(rSize, 1);

@@ -5,10 +5,10 @@ import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.triples.IndexedNode;
 import com.the_qa_company.qendpoint.core.triples.TripleString;
 import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
-import com.the_qa_company.qendpoint.core.util.io.compress.CompressNodeMergeIterator;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressNodeReader;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressUtil;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
+import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionFunction;
@@ -58,6 +58,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	private final int bufferSize;
 	private final long chunkSize;
 	private final int k;
+	private final int maxConcurrentMerges;
 	private final boolean debugSleepKwayDict;
 	private final boolean quads;
 	private final long start = System.currentTimeMillis();
@@ -66,12 +67,20 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	public SectionCompressor(CloseSuppressPath baseFileName, AsyncIteratorFetcher<TripleString> source,
 			MultiThreadListener listener, int bufferSize, long chunkSize, int k, boolean debugSleepKwayDict,
 			boolean quads, CompressionType compressionType) {
+		this(baseFileName, source, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quads, compressionType,
+				Integer.MAX_VALUE);
+	}
+
+	public SectionCompressor(CloseSuppressPath baseFileName, AsyncIteratorFetcher<TripleString> source,
+			MultiThreadListener listener, int bufferSize, long chunkSize, int k, boolean debugSleepKwayDict,
+			boolean quads, CompressionType compressionType, int maxConcurrentMerges) {
 		this.source = source;
 		this.listener = listener;
 		this.baseFileName = baseFileName;
 		this.bufferSize = bufferSize;
 		this.chunkSize = chunkSize;
 		this.k = k;
+		this.maxConcurrentMerges = maxConcurrentMerges <= 0 ? Integer.MAX_VALUE : maxConcurrentMerges;
 		this.debugSleepKwayDict = debugSleepKwayDict;
 		this.quads = quads;
 		this.compressionType = compressionType;
@@ -79,7 +88,15 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 
 	public SectionCompressor(CloseSuppressPath baseFileName, MultiThreadListener listener, int bufferSize,
 			long chunkSize, int k, boolean debugSleepKwayDict, boolean quads, CompressionType compressionType) {
-		this(baseFileName, null, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quads, compressionType);
+		this(baseFileName, null, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quads, compressionType,
+				Integer.MAX_VALUE);
+	}
+
+	public SectionCompressor(CloseSuppressPath baseFileName, MultiThreadListener listener, int bufferSize,
+			long chunkSize, int k, boolean debugSleepKwayDict, boolean quads, CompressionType compressionType,
+			int maxConcurrentMerges) {
+		this(baseFileName, null, listener, bufferSize, chunkSize, k, debugSleepKwayDict, quads, compressionType,
+				maxConcurrentMerges);
 	}
 
 	/*
@@ -176,8 +193,10 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 					"compressToFile(workers) requires a source; use compressPull(...) instead.");
 		}
 		// force to create the first file
+		int workerThreads = Math.max(1, workers - 1);
+		int mergeLimit = Math.min(workerThreads, maxConcurrentMerges);
 		KWayMerger<TripleString, SizedSupplier<TripleString>> merger = new KWayMerger<>(baseFileName, source, this,
-				Math.max(1, workers - 1), k);
+				workerThreads, k, mergeLimit);
 		merger.start();
 		// wait for the workers to merge the sections and create the triples
 		Optional<CloseSuppressPath> sections = merger.waitResult();
@@ -404,8 +423,10 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	public CompressionResult compressToFilePull(int workers,
 			ExceptionSupplier<SizedSupplier<TripleString>, IOException> chunkSupplier)
 			throws IOException, InterruptedException, KWayMerger.KWayMergerException {
+		int workerThreads = Math.max(1, workers - 1);
+		int mergeLimit = Math.min(workerThreads, maxConcurrentMerges);
 		KWayMergerChunked<TripleString, SizedSupplier<TripleString>> merger = new KWayMergerChunked<>(baseFileName,
-				chunkSupplier, this, Math.max(1, workers - 1), k);
+				chunkSupplier, this, workerThreads, k, mergeLimit);
 
 		merger.start();
 		Optional<CloseSuppressPath> sections = merger.waitResult();
@@ -698,9 +719,9 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 				}
 
 				// section
-				try (OutputStream output = openW.get()) { // IndexNodeDeltaMergeExceptionIterator
-					CompressUtil.writeCompressedSection(CompressNodeMergeIterator.buildOfTree(readers), size, output,
-							il);
+				try (OutputStream output = openW.get()) {
+					CompressUtil.writeCompressedSection(PriorityQueueMergeExceptionIterator.merge(List.of(readers)),
+							size, output, il);
 				}
 			} finally {
 				if (async) {

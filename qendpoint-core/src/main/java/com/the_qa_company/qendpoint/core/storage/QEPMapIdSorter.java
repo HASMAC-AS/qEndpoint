@@ -7,7 +7,7 @@ import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.FetcherExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.FetcherIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.IteratorChunkedSource;
-import com.the_qa_company.qendpoint.core.iterator.utils.MergeExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.BitUtil;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMerger;
@@ -25,7 +25,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.Supplier;
@@ -157,11 +156,13 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 
 	private record MergerChunked()
 			implements KWayMergerChunked.KWayMergerChunkedImpl<QEPMapIds, SizedSupplier<QEPMapIds>> {
+		private static final int IO_BUFFER_SIZE = 4 * 1024 * 1024;
 
 		@Override
 		public void createChunk(SizedSupplier<QEPMapIds> flux, CloseSuppressPath output)
 				throws KWayMerger.KWayMergerException {
-			try (BufferedOutputStream stream = new BufferedOutputStream(Files.newOutputStream(output))) {
+			try (BufferedOutputStream stream = new BufferedOutputStream(Files.newOutputStream(output),
+					IO_BUFFER_SIZE)) {
 				QEPMapIds ids;
 
 				List<QEPMapIds> idList = new ArrayList<>();
@@ -191,17 +192,22 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 				InputStream[] pathInput = new InputStream[inputs.size()];
 
 				for (int i = 0; i < pathInput.length; i++) {
-					pathInput[i] = new BufferedInputStream(Files.newInputStream(inputs.get(i)), 4 * 1024 * 1024);
+					pathInput[i] = new BufferedInputStream(Files.newInputStream(inputs.get(i)), IO_BUFFER_SIZE);
 				}
 
 				try {
 
-					ExceptionIterator<QEPMapIds, IOException> tree = MergeExceptionIterator
-							.buildOfTree(QEPMapReader::new, Arrays.asList(pathInput), 0, inputs.size());
+					List<ExceptionIterator<QEPMapIds, IOException>> readers = new ArrayList<>(pathInput.length);
+					for (InputStream inputStream : pathInput) {
+						readers.add(new QEPMapReader(inputStream));
+					}
+					ExceptionIterator<QEPMapIds, IOException> merged = PriorityQueueMergeExceptionIterator
+							.merge(readers, QEPMapIds::compareTo);
 
-					try (BufferedOutputStream stream = new BufferedOutputStream(Files.newOutputStream(output))) {
-						while (tree.hasNext()) {
-							QEPMapIds ids = tree.next();
+					try (BufferedOutputStream stream = new BufferedOutputStream(Files.newOutputStream(output),
+							IO_BUFFER_SIZE)) {
+						while (merged.hasNext()) {
+							QEPMapIds ids = merged.next();
 							VByte.encode(stream, ids.origin());
 							VByte.encode(stream, ids.destination());
 						}
