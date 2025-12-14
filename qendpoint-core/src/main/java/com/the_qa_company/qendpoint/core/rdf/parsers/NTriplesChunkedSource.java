@@ -232,7 +232,7 @@ public final class NTriplesChunkedSource
 		}
 
 		try {
-			out.read(line, start, end, readQuad);
+			out.readByteString(line, start, end, readQuad);
 			if (!out.hasEmpty()) {
 				return true;
 			}

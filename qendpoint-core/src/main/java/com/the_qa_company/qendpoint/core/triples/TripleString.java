@@ -22,7 +22,6 @@ package com.the_qa_company.qendpoint.core.triples;
 import com.the_qa_company.qendpoint.core.exceptions.ParserException;
 import com.the_qa_company.qendpoint.core.util.UnicodeEscape;
 import com.the_qa_company.qendpoint.core.util.string.ByteString;
-import com.the_qa_company.qendpoint.core.util.string.CompactString;
 
 import java.io.IOException;
 
@@ -290,6 +289,30 @@ public class TripleString {
 	 * @throws ParserException if the line is not RDF complient
 	 */
 	public void read(String line, int start, int end, boolean processQuad) throws ParserException {
+		readImpl(line, start, end, processQuad, UnicodeEscape::unescapeString);
+	}
+
+	/**
+	 * Read from a line, where each component is separated by space, producing
+	 * {@link ByteString} values directly.
+	 *
+	 * @param line        line to read
+	 * @param start       start in the string
+	 * @param end         in the string
+	 * @param processQuad process quad
+	 * @throws ParserException if the line is not RDF complient
+	 */
+	public void readByteString(String line, int start, int end, boolean processQuad) throws ParserException {
+		readImpl(line, start, end, processQuad, UnicodeEscape::unescapeByteString);
+	}
+
+	@FunctionalInterface
+	private interface ComponentDecoder {
+		CharSequence decode(String line, int start, int end);
+	}
+
+	private void readImpl(String line, int start, int end, boolean processQuad, ComponentDecoder decoder)
+			throws ParserException {
 		int split, posa, posb;
 		// for quad implementation, don't forget to clear the graph
 		this.clear();
@@ -309,7 +332,7 @@ public class TripleString {
 			}
 		}
 
-		this.setSubject(UnicodeEscape.unescapeString(line, posa, posb));
+		this.setSubject(decoder.decode(line, posa, posb));
 
 		// SET PREDICATE
 		posa = split + 1;
@@ -325,7 +348,7 @@ public class TripleString {
 			}
 		}
 
-		this.setPredicate(UnicodeEscape.unescapeString(line, posa, posb));
+		this.setPredicate(decoder.decode(line, posa, posb));
 
 		if (processQuad) {
 			// SET OBJECT
@@ -355,7 +378,7 @@ public class TripleString {
 						throw new ParserException("end of a '>' without a start '<'", line, posb);
 					}
 					if (posa != iriStart && line.charAt(iriStart - 1) != '^') {
-						this.setGraph(UnicodeEscape.unescapeString(line, iriStart + 1, posb - 1));
+						this.setGraph(decoder.decode(line, iriStart + 1, posb - 1));
 						posb = iriStart - 1;
 					}
 					// not the current element, literal or object iri
@@ -371,7 +394,7 @@ public class TripleString {
 
 					int bnodeStart = searchBNodeBackward(line, posa, posb);
 					if (bnodeStart > posa) {
-						this.setGraph(UnicodeEscape.unescapeString(line, bnodeStart + 1, posb - 1));
+						this.setGraph(decoder.decode(line, bnodeStart + 1, posb - 1));
 						posb = bnodeStart;
 					}
 					// not the current element, literal language or object bnode
@@ -403,7 +426,7 @@ public class TripleString {
 			}
 		}
 
-		this.setObject(UnicodeEscape.unescapeString(line, posa, posb));
+		this.setObject(decoder.decode(line, posa, posb));
 	}
 
 	/*

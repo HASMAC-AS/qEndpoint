@@ -87,46 +87,74 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 	 */
 
 	/**
-	 * mapping method for the subject of the triple, this method should copy the
-	 * sequence!
+	 * mapping method for the subject of the triple. This method must return an
+	 * independent immutable {@link ByteString}. If the input is already an
+	 * immutable {@link ByteString}, it may be returned as-is.
 	 *
 	 * @param seq the subject (before)
 	 * @return the subject mapped
 	 */
 	protected ByteString convertSubject(CharSequence seq) {
+		if (seq instanceof CompactString cs) {
+			return cs;
+		}
+		if (seq instanceof ByteString bs) {
+			return new CompactString(bs);
+		}
 		return new CompactString(seq);
 	}
 
 	/**
-	 * mapping method for the predicate of the triple, this method should copy
-	 * the sequence!
+	 * mapping method for the predicate of the triple. This method must return
+	 * an independent immutable {@link ByteString}. If the input is already an
+	 * immutable {@link ByteString}, it may be returned as-is.
 	 *
 	 * @param seq the predicate (before)
 	 * @return the predicate mapped
 	 */
 	protected ByteString convertPredicate(CharSequence seq) {
+		if (seq instanceof CompactString cs) {
+			return cs;
+		}
+		if (seq instanceof ByteString bs) {
+			return new CompactString(bs);
+		}
 		return new CompactString(seq);
 	}
 
 	/**
-	 * mapping method for the graph of the triple, this method should copy the
-	 * sequence!
+	 * mapping method for the graph of the triple. This method must return an
+	 * independent immutable {@link ByteString}. If the input is already an
+	 * immutable {@link ByteString}, it may be returned as-is.
 	 *
 	 * @param seq the graph (before)
 	 * @return the graph mapped
 	 */
 	protected ByteString convertGraph(CharSequence seq) {
+		if (seq instanceof CompactString cs) {
+			return cs;
+		}
+		if (seq instanceof ByteString bs) {
+			return new CompactString(bs);
+		}
 		return new CompactString(seq);
 	}
 
 	/**
-	 * mapping method for the object of the triple, this method should copy the
-	 * sequence!
+	 * mapping method for the object of the triple. This method must return an
+	 * independent immutable {@link ByteString}. If the input is already an
+	 * immutable {@link ByteString}, it may be returned as-is.
 	 *
 	 * @param seq the object (before)
 	 * @return the object mapped
 	 */
 	protected ByteString convertObject(CharSequence seq) {
+		if (seq instanceof CompactString cs) {
+			return cs;
+		}
+		if (seq instanceof ByteString bs) {
+			return new CompactString(bs);
+		}
 		return new CompactString(seq);
 	}
 

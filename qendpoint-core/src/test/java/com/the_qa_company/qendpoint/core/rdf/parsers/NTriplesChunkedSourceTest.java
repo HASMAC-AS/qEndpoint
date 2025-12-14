@@ -2,6 +2,7 @@ package com.the_qa_company.qendpoint.core.rdf.parsers;
 
 import com.the_qa_company.qendpoint.core.enums.RDFNotation;
 import com.the_qa_company.qendpoint.core.triples.TripleString;
+import com.the_qa_company.qendpoint.core.util.string.ByteString;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -48,6 +49,9 @@ public class NTriplesChunkedSourceTest {
 		Supplier<?> flux1 = (Supplier<?>) chunk1;
 		TripleString t1 = (TripleString) flux1.get();
 		assertNotNull(t1);
+		assertTrue(t1.getSubject() instanceof ByteString);
+		assertTrue(t1.getPredicate() instanceof ByteString);
+		assertTrue(t1.getObject() instanceof ByteString);
 		assertEquals("http://ex/s", t1.getSubject().toString());
 		assertEquals("http://ex/p", t1.getPredicate().toString());
 		assertEquals("\"o\"", t1.getObject().toString());
@@ -63,6 +67,9 @@ public class NTriplesChunkedSourceTest {
 
 		TripleString t2 = (TripleString) flux2.get();
 		assertNotNull(t2);
+		assertTrue(t2.getSubject() instanceof ByteString);
+		assertTrue(t2.getPredicate() instanceof ByteString);
+		assertTrue(t2.getObject() instanceof ByteString);
 		assertEquals("http://ex/s2", t2.getSubject().toString());
 		assertEquals("http://ex/p2", t2.getPredicate().toString());
 		assertEquals("http://ex/o2", t2.getObject().toString());
@@ -102,6 +109,10 @@ public class NTriplesChunkedSourceTest {
 		Supplier<?> flux1 = (Supplier<?>) chunk1;
 		TripleString t1 = (TripleString) flux1.get();
 		assertNotNull(t1);
+		assertTrue(t1.getSubject() instanceof ByteString);
+		assertTrue(t1.getPredicate() instanceof ByteString);
+		assertTrue(t1.getObject() instanceof ByteString);
+		assertTrue(t1.getGraph() instanceof ByteString);
 		assertEquals("http://ex/s", t1.getSubject().toString());
 		assertEquals("http://ex/p", t1.getPredicate().toString());
 		assertEquals("\"o\"", t1.getObject().toString());
@@ -113,6 +124,10 @@ public class NTriplesChunkedSourceTest {
 		Supplier<?> flux2 = (Supplier<?>) chunk2;
 		TripleString t2 = (TripleString) flux2.get();
 		assertNotNull(t2);
+		assertTrue(t2.getSubject() instanceof ByteString);
+		assertTrue(t2.getPredicate() instanceof ByteString);
+		assertTrue(t2.getObject() instanceof ByteString);
+		assertTrue(t2.getGraph() instanceof ByteString);
 		assertEquals("http://ex/s2", t2.getSubject().toString());
 		assertEquals("http://ex/p2", t2.getPredicate().toString());
 		assertEquals("http://ex/o2", t2.getObject().toString());
