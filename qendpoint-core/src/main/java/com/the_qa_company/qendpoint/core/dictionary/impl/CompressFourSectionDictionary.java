@@ -20,6 +20,11 @@ import com.the_qa_company.qendpoint.core.util.string.CharSequenceComparator;
 import com.the_qa_company.qendpoint.core.util.string.CompactString;
 
 import java.io.IOException;
+import java.nio.file.StandardOpenOption;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.function.Consumer;
 
@@ -38,6 +43,9 @@ public class CompressFourSectionDictionary implements TempDictionary {
 	private final TempDictionarySection shared;
 	private final TempDictionarySection graph;
 
+	private static final DateTimeFormatter PROGRESS_DATE_TIME_FORMAT = DateTimeFormatter
+			.ofPattern("yyyy-MM-dd HH:mm:ss.SSS z");
+
 	private static void sendPiped(IndexedNode node, long index, PipedCopyIterator<CharSequence> pipe,
 			CompressUtil.DuplicatedIterator it, NodeConsumerMethod method) {
 		it.setLastHeader(index);
@@ -55,14 +63,17 @@ public class CompressFourSectionDictionary implements TempDictionary {
 				new NotificationExceptionIterator<>(compressionResult.getSubjects(), compressionResult.getTripleCount(),
 						splits, "Subject section filling", listener),
 				(originalIndex, duplicatedIndex, lastHeader) -> nodeConsumer.onSubject(duplicatedIndex, lastHeader));
+
 		CompressUtil.DuplicatedIterator sortedPredicate = CompressUtil.asNoDupeCharSequenceIterator(
 				new NotificationExceptionIterator<>(compressionResult.getPredicates(),
 						compressionResult.getTripleCount(), splits, "Predicate section filling", listener),
 				(originalIndex, duplicatedIndex, lastHeader) -> nodeConsumer.onPredicate(duplicatedIndex, lastHeader));
+
 		CompressUtil.DuplicatedIterator sortedObject = CompressUtil.asNoDupeCharSequenceIterator(
 				new NotificationExceptionIterator<>(compressionResult.getObjects(), compressionResult.getTripleCount(),
 						splits, "Object section filling", listener),
 				(originalIndex, duplicatedIndex, lastHeader) -> nodeConsumer.onObject(duplicatedIndex, lastHeader));
+
 		CompressUtil.DuplicatedIterator sortedGraph;
 		if (quad) {
 			sortedGraph = CompressUtil.asNoDupeCharSequenceIterator(
@@ -84,6 +95,12 @@ public class CompressFourSectionDictionary implements TempDictionary {
 		PipedCopyIterator<CharSequence> shared = new PipedCopyIterator<>();
 		Comparator<CharSequence> comparator = CharSequenceComparator.getInstance();
 		cfsdThread = new ExceptionThread(() -> {
+			long itemsProcess = 0;
+			long l = System.currentTimeMillis();
+			Files.writeString(
+					Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_start_time.txt"),
+					"CFSD Start time: " + l + "\n");
+
 			try {
 				long sharedId = 1;
 				long subjectId = 1;
@@ -98,11 +115,15 @@ public class CompressFourSectionDictionary implements TempDictionary {
 					int comp = comparator.compare(newSubject.getNode(), newObject.getNode());
 					while (comp != 0) {
 						if (comp < 0) {
+							itemsProcess = logProgress(itemsProcess, l);
+
 							sendPiped(newSubject, CompressUtil.getHeaderId(subjectId++), subject, sortedSubject,
 									nodeConsumer::onSubject);
 							if (!sortedSubject.hasNext()) {
 								// no more subjects, send the current object and
 								// break the shared loop
+								itemsProcess = logProgress(itemsProcess, l);
+
 								sendPiped(newObject, CompressUtil.getHeaderId(objectId++), object, sortedObject,
 										nodeConsumer::onObject);
 								break sharedLoop;
@@ -110,11 +131,15 @@ public class CompressFourSectionDictionary implements TempDictionary {
 							newSubject = sortedSubject.next();
 							debugOrderCheckerS.accept(newSubject);
 						} else {
+							itemsProcess = logProgress(itemsProcess, l);
+
 							sendPiped(newObject, CompressUtil.getHeaderId(objectId++), object, sortedObject,
 									nodeConsumer::onObject);
 							if (!sortedObject.hasNext()) {
 								// no more objects, send the current subject and
 								// break the shared loop
+								itemsProcess = logProgress(itemsProcess, l);
+
 								sendPiped(newSubject, CompressUtil.getHeaderId(subjectId++), subject, sortedSubject,
 										nodeConsumer::onSubject);
 								break sharedLoop;
@@ -138,6 +163,7 @@ public class CompressFourSectionDictionary implements TempDictionary {
 				while (sortedSubject.hasNext()) {
 					IndexedNode next = sortedSubject.next();
 					debugOrderCheckerS.accept(next);
+					itemsProcess = logProgress(itemsProcess, l);
 					sendPiped(next, CompressUtil.getHeaderId(subjectId++), subject, sortedSubject,
 							nodeConsumer::onSubject);
 				}
@@ -146,9 +172,19 @@ public class CompressFourSectionDictionary implements TempDictionary {
 				while (sortedObject.hasNext()) {
 					IndexedNode next = sortedObject.next();
 					debugOrderCheckerO.accept(next);
+					itemsProcess = logProgress(itemsProcess, l);
 					sendPiped(next, CompressUtil.getHeaderId(objectId++), object, sortedObject, nodeConsumer::onObject);
 				}
 				object.closePipe();
+
+				long end = System.currentTimeMillis();
+				Files.writeString(
+						Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_end_time.txt"),
+						"CFSD End time: " + end + "\n");
+				Files.writeString(
+						Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_total_time.txt"),
+						"CFSD Total time: " + (end - l) / 1000 + " s\n");
+
 			} catch (Throwable t) {
 				object.closePipe(t);
 				subject.closePipe(t);
@@ -182,6 +218,21 @@ public class CompressFourSectionDictionary implements TempDictionary {
 		} else {
 			this.graph = null;
 		}
+	}
+
+	private static long logProgress(long itemsProcess, long l) throws IOException {
+		if (itemsProcess++ % 1_000_000 == 0) {
+			long current = System.currentTimeMillis();
+			long elapsedSeconds = Math.max(1L, (current - l) / 1000L);
+			long itemsPerSecond = itemsProcess / elapsedSeconds;
+			String datetime = ZonedDateTime.now().format(PROGRESS_DATE_TIME_FORMAT);
+			Files.writeString(
+					Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_profress.txt"),
+					"CFSD progress [" + datetime + "]: " + itemsProcess + " triples processed, " + itemsPerSecond
+							+ " triples/s\n",
+					StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+		}
+		return itemsProcess;
 	}
 
 	@Override
