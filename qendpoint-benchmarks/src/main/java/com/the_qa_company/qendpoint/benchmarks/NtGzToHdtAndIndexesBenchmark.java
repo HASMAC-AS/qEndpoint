@@ -22,6 +22,9 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -153,6 +156,19 @@ public class NtGzToHdtAndIndexesBenchmark {
 				}
 			});
 		}
+	}
+
+	public static void main(String[] args) throws Exception {
+		Options opt = new OptionsBuilder().include(NtGzToHdtAndIndexesBenchmark.class.getName()) // adapt
+																									// to
+																									// run
+																									// other
+																									// benchmark
+																									// tests
+				.forks(0).build();
+
+		new Runner(opt).run();
+
 	}
 
 	@Benchmark

@@ -87,6 +87,9 @@ public class LongArrayDisk implements Closeable, LongArray {
 				} else {
 					sizeMapping = MAPPING_SIZE;
 				}
+				sizeMapping = Math.max(sizeMapping, 8 * 1024);// at least 8KB
+																// for
+																// performance
 				assert mappings[block] == null;
 				mappings[block] = IOUtil.mapChannel(location.toAbsolutePath().toString(), this.channel,
 						FileChannel.MapMode.READ_WRITE, start + block * MAPPING_SIZE, sizeMapping);
