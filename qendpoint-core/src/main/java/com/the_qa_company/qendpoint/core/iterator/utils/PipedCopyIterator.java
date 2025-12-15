@@ -111,8 +111,8 @@ public class PipedCopyIterator<T> implements Iterator<T>, Closeable {
 		}
 	}
 
-	private final SpscArrayQueue<QueueObject<T>> queue1 = new SpscArrayQueue<>(16);
-	private final SpscArrayQueue<QueueObject<T>> queue2 = new SpscArrayQueue<>(16);
+	private final SpscArrayQueue<QueueObject<T>> queue1 = new SpscArrayQueue<>(4*1024);
+	private final SpscArrayQueue<QueueObject<T>> queue2 = new SpscArrayQueue<>(4*1024);
 	private final SpscArrayQueue<QueueObject<T>> activeReadQueue = queue1;
 	private final SpscArrayQueue<QueueObject<T>> activeWriteQueue = queue1;
 
