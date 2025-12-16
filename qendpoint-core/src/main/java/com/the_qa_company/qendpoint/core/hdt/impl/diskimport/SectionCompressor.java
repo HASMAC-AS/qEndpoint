@@ -201,7 +201,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 		// wait for the workers to merge the sections and create the triples
 		Optional<CloseSuppressPath> sections = merger.waitResult();
 		if (sections.isEmpty()) {
-			return new CompressionResultEmpty();
+			return new CompressionResultEmpty(supportsGraph());
 		}
 		return new CompressionResultFile(triples.get(), ntRawSize.get(), new TripleFile(sections.get(), false),
 				supportsGraph());
@@ -431,7 +431,7 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 		merger.start();
 		Optional<CloseSuppressPath> sections = merger.waitResult();
 		if (sections.isEmpty()) {
-			return new CompressionResultEmpty();
+			return new CompressionResultEmpty(supportsGraph());
 		}
 		return new CompressionResultFile(triples.get(), ntRawSize.get(), new TripleFile(sections.get(), false),
 				supportsGraph());

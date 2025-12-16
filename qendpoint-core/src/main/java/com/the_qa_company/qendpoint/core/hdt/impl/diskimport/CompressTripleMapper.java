@@ -86,10 +86,32 @@ public class CompressTripleMapper implements CompressFourSectionDictionary.NodeC
 	}
 
 	@Override
+	public void onSubject(long[] preMapIds, long[] newMapIds, int offset, int length) {
+		assert preMapIds != null;
+		assert newMapIds != null;
+		for (int i = offset; i < offset + length; i++) {
+			assert preMapIds[i] > 0;
+			assert newMapIds[i] >= CompressUtil.getHeaderId(1);
+		}
+		subjects.set(preMapIds, newMapIds, offset, length);
+	}
+
+	@Override
 	public void onPredicate(long preMapId, long newMapId) {
 		assert preMapId > 0;
 		assert newMapId >= CompressUtil.getHeaderId(1);
 		predicates.set(preMapId, newMapId);
+	}
+
+	@Override
+	public void onPredicate(long[] preMapIds, long[] newMapIds, int offset, int length) {
+		assert preMapIds != null;
+		assert newMapIds != null;
+		for (int i = offset; i < offset + length; i++) {
+			assert preMapIds[i] > 0;
+			assert newMapIds[i] >= CompressUtil.getHeaderId(1);
+		}
+		predicates.set(preMapIds, newMapIds, offset, length);
 	}
 
 	@Override
@@ -100,10 +122,32 @@ public class CompressTripleMapper implements CompressFourSectionDictionary.NodeC
 	}
 
 	@Override
+	public void onObject(long[] preMapIds, long[] newMapIds, int offset, int length) {
+		assert preMapIds != null;
+		assert newMapIds != null;
+		for (int i = offset; i < offset + length; i++) {
+			assert preMapIds[i] > 0;
+			assert newMapIds[i] >= CompressUtil.getHeaderId(1);
+		}
+		objects.set(preMapIds, newMapIds, offset, length);
+	}
+
+	@Override
 	public void onGraph(long preMapId, long newMapId) {
 		assert preMapId > 0;
 		assert newMapId >= CompressUtil.getHeaderId(1) : "negative or null new grap id";
 		graph.set(preMapId, newMapId);
+	}
+
+	@Override
+	public void onGraph(long[] preMapIds, long[] newMapIds, int offset, int length) {
+		assert preMapIds != null;
+		assert newMapIds != null;
+		for (int i = offset; i < offset + length; i++) {
+			assert preMapIds[i] > 0;
+			assert newMapIds[i] >= CompressUtil.getHeaderId(1) : "negative or null new grap id";
+		}
+		graph.set(preMapIds, newMapIds, offset, length);
 	}
 
 	public void setShared(long shared) {

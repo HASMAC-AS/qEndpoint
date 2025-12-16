@@ -87,9 +87,11 @@ public class LongArrayDisk implements Closeable, LongArray {
 				} else {
 					sizeMapping = MAPPING_SIZE;
 				}
-				sizeMapping = Math.max(sizeMapping, 8 * 1024);// at least 8KB
-																// for
-																// performance
+
+				if (sizeMapping <= 8) {
+					sizeMapping = MAPPING_SIZE;
+				}
+
 				assert mappings[block] == null;
 				mappings[block] = IOUtil.mapChannel(location.toAbsolutePath().toString(), this.channel,
 						FileChannel.MapMode.READ_WRITE, start + block * MAPPING_SIZE, sizeMapping);
@@ -148,6 +150,41 @@ public class LongArrayDisk implements Closeable, LongArray {
 		int block = (int) (p / MAPPING_SIZE);
 		int offset = (int) (p % MAPPING_SIZE);
 		mappings[block].putLong(offset, value);
+	}
+
+	public void set(long startIndex, long[] values, int offset, int length) {
+		if (length == 0) {
+			return;
+		}
+
+		if (values == null) {
+			throw new NullPointerException();
+		}
+		if (startIndex < 0 || startIndex + length > size) {
+			throw new IndexOutOfBoundsException();
+		}
+		if (offset < 0 || length < 0 || offset + length > values.length) {
+			throw new IndexOutOfBoundsException();
+		}
+
+		long p = startIndex * 8;
+		int block = (int) (p / MAPPING_SIZE);
+		int byteOffset = (int) (p % MAPPING_SIZE);
+		int valueOffset = offset;
+		int remaining = length;
+
+		while (remaining > 0) {
+			CloseMappedByteBuffer mapping = mappings[block];
+			int availableLongs = (mapping.capacity() - byteOffset) / Long.BYTES;
+			int toWrite = Math.min(remaining, availableLongs);
+
+			mapping.putLongs(byteOffset, values, valueOffset, toWrite);
+
+			remaining -= toWrite;
+			valueOffset += toWrite;
+			block++;
+			byteOffset = 0;
+		}
 	}
 
 	@Override

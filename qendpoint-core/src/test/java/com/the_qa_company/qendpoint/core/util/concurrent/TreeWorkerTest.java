@@ -256,8 +256,7 @@ public class TreeWorkerTest {
 		TreeWorker<IntegerArrayList, IntegerArrayList> worker = new TreeWorker<>(
 				(IntegerArrayList[] array, int length) -> {
 					Iterator<Integer> it = MergeExceptionIterator
-							.buildOfTree(l -> ExceptionIterator.of(l.iterator()), com, array, length, Integer.MAX_VALUE)
-							.asIterator();
+							.buildOfTree(l -> ExceptionIterator.of(l.iterator()), com, array, length).asIterator();
 					IntegerArrayList l = new IntegerArrayList();
 					while (it.hasNext()) {
 						l.add(it.next());

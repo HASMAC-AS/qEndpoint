@@ -21,6 +21,7 @@ import com.the_qa_company.qendpoint.core.listener.MultiThreadListener;
 import com.the_qa_company.qendpoint.core.listener.ProgressListener;
 import com.the_qa_company.qendpoint.core.options.HDTOptions;
 import com.the_qa_company.qendpoint.core.options.HDTOptionsKeys;
+import com.the_qa_company.qendpoint.core.quad.QuadString;
 import com.the_qa_company.qendpoint.core.rdf.parsers.NTriplesChunkedSource;
 import com.the_qa_company.qendpoint.core.triples.TripleID;
 import com.the_qa_company.qendpoint.core.triples.TempTriples;
@@ -202,7 +203,12 @@ public class HDTDiskImporter implements Closeable {
 		profiler.pushSection("section compression");
 		CompressionResult compressionResult;
 		try (IteratorChunkedSource<TripleString> chunkSource = IteratorChunkedSource.of(iterator,
-				FileTripleIterator::estimateSize, chunkSize, TripleString::new)) {
+				FileTripleIterator::estimateSize, chunkSize, triple -> {
+					if (triple instanceof QuadString) {
+						return new QuadString(triple);
+					}
+					return new TripleString(triple);
+				})) {
 			compressionResult = DictionaryFactory.createSectionCompressorPull(hdtFormat,
 					basePath.resolve("sectionCompression"), listener, bufferSize, chunkSize, 1 << ways,
 					hdtFormat.getBoolean("debug.disk.slow.stream2"), compressionType)
