@@ -7,7 +7,7 @@ import com.the_qa_company.qendpoint.core.util.io.compress.PairReader;
 import com.the_qa_company.qendpoint.core.util.io.compress.PairWriter;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
-import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.LoserTreeMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
@@ -106,7 +106,7 @@ public class DiskIndexSort implements KWayMerger.KWayMergerImpl<Pair, SizedSuppl
 					readers[i] = new PairReader(inputs.get(i).openInputStream(bufferSize));
 				}
 
-				ExceptionIterator<Pair, IOException> it = PriorityQueueMergeExceptionIterator.merge(List.of(readers),
+				ExceptionIterator<Pair, IOException> it = LoserTreeMergeExceptionIterator.merge(List.of(readers),
 						comparator);
 				// at least one
 				long rSize = it.getSize();

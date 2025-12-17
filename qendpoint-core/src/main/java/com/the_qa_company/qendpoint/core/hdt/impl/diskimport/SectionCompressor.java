@@ -8,7 +8,7 @@ import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressNodeReader;
 import com.the_qa_company.qendpoint.core.util.io.compress.CompressUtil;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
-import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.LoserTreeMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionFunction;
@@ -720,8 +720,8 @@ public class SectionCompressor implements KWayMerger.KWayMergerImpl<TripleString
 
 				// section
 				try (OutputStream output = openW.get()) {
-					CompressUtil.writeCompressedSection(PriorityQueueMergeExceptionIterator.merge(List.of(readers)),
-							size, output, il);
+					CompressUtil.writeCompressedSection(LoserTreeMergeExceptionIterator.merge(List.of(readers)), size,
+							output, il);
 				}
 			} finally {
 				if (async) {

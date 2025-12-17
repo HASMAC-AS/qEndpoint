@@ -13,7 +13,7 @@ import com.the_qa_company.qendpoint.core.triples.TripleIDComparator;
 import com.the_qa_company.qendpoint.core.util.ParallelSortableArrayList;
 import com.the_qa_company.qendpoint.core.iterator.utils.AsyncIteratorFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
-import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.LoserTreeMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizeFetcher;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionSupplier;
@@ -259,7 +259,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 
 				try (CompressTripleWriter w = new CompressTripleWriter(output.openOutputStream(bufferSize),
 						mapper.supportsGraph())) {
-					ExceptionIterator<TripleID, IOException> it = PriorityQueueMergeExceptionIterator
+					ExceptionIterator<TripleID, IOException> it = LoserTreeMergeExceptionIterator
 							.merge(List.of(readers), TripleIDComparator.getComparator(order));
 					boolean quad = mapper.supportsGraph();
 					TripleID prev = quad ? new TripleID(-1, -1, -1, -1) : new TripleID(-1, -1, -1);

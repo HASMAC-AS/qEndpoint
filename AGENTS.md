@@ -310,7 +310,10 @@ Why this is mandatory
 - Therefore, tests only see whatever versions were last published to the configured local repo (`.m2_repo`). If you change code in one module and then run tests in another, those tests will not see your changes unless the updated module has been installed to `.m2_repo` first.
 - The reliable way to ensure all tests always use the latest code across the entire multi‑module build is to install all modules to the configured local repo (`.m2_repo`) before running any tests: run `mvn -T 1C -o -Dmaven.repo.local=.m2_repo -DskipTests clean install` at the repository root.
 - In tight loops you may also install a specific module and its deps (`-pl <module> -am -DskipTests clean install`) to iterate quickly, but before executing tests anywhere that depend on your changes, run a root‑level `mvn -T 1C -o -Dmaven.repo.local=.m2_repo -DskipTests clean install` so the latest jars are available to the reactor from `.m2_repo`.
----
+
+It is illegal to revert unrelated changes!
+
+--
 
 ## Quick Start (First 10 Minutes)
 
@@ -331,6 +334,7 @@ Why this is mandatory
 
 It is illegal to `-am` when running tests!
 It is illegal to `-q` when running tests!
+It is illegal to revert unrelated changes!
 
 ---
 
@@ -608,19 +612,12 @@ Do **not** modify existing headers’ years.
 
 * By module: `mvn -o -Dmaven.repo.local=.m2_repo -pl core/sail/shacl verify | tail -500`
 * Entire repo: `mvn -o -Dmaven.repo.local=.m2_repo verify` (long; only when appropriate)
-* Slow tests (entire repo):
-  `mvn -o -Dmaven.repo.local=.m2_repo verify -PslowTestsOnly,-skipSlowTests | tail -500`
-* Slow tests (by module):
-  `mvn -o -Dmaven.repo.local=.m2_repo -pl <module> verify -PslowTestsOnly,-skipSlowTests | tail -500`
-* Slow tests (specific test):
-
-    * `mvn -o -Dmaven.repo.local=.m2_repo -pl core/sail/shacl -PslowTestsOnly,-skipSlowTests -Dtest=ClassName#method verify | tail -500`
-* Integration tests (entire repo):
-  `mvn -o -Dmaven.repo.local=.m2_repo verify -PskipUnitTests | tail -500`
-* Integration tests (by module):
-  `mvn -o -Dmaven.repo.local=.m2_repo -pl <module> verify -PskipUnitTests | tail -500`
+* Slow tests (entire repo): `mvn -o -Dmaven.repo.local=.m2_repo verify -PslowTestsOnly,-skipSlowTests | tail -500`
+* Slow tests (by module): `mvn -o -Dmaven.repo.local=.m2_repo -pl <module> verify -PslowTestsOnly,-skipSlowTests | tail -500`
+* Slow tests (specific test): `mvn -o -Dmaven.repo.local=.m2_repo -pl core/sail/shacl -PslowTestsOnly,-skipSlowTests -Dtest=ClassName#method verify | tail -500`
+* Integration tests (entire repo): `mvn -o -Dmaven.repo.local=.m2_repo verify -PskipUnitTests | tail -500`
+* Integration tests (by module): `mvn -o -Dmaven.repo.local=.m2_repo -pl <module> verify -PskipUnitTests | tail -500`
 * Useful flags:
-
     * `-Dtest=ClassName`
     * `-Dtest=ClassName#method`
     * `-Dit.test=ITClass#method`
@@ -682,13 +679,16 @@ JaCoCo is configured via the `jacoco` Maven profile in the root POM. Surefire/Fa
 * Don’t commit or push unless explicitly asked.
 * Don’t add new dependencies without explicit approval.
 * Never revert unrelated working tree changes
+* Never revert unrelated changes
 
 ### Version Control Conventions
 
 * Branch names must always start with the GitHub issue identifier in the form `GH-XXXX`, where `XXXX` is the numeric issue number.
 * Every commit message must be prefixed with the corresponding `GH-XXXX` label.
 * Exception: if no GitHub issue number is available for the task, clearly note this in your handoff and align with the requester on an appropriate branch/commit prefix before proceeding.
+* Never revert unrelated changes
 
 It is illegal to `-am` when running tests!
 It is illegal to `-q` when running tests!
+It is illegal to revert unrelated changes!
 You must follow these rules and instructions exactly as stated.

@@ -18,6 +18,8 @@ import com.the_qa_company.qendpoint.core.iterator.utils.PipedCopyIterator;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionThread;
 import com.the_qa_company.qendpoint.core.util.string.CharSequenceComparator;
 import com.the_qa_company.qendpoint.core.util.string.CompactString;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,7 +39,8 @@ import java.util.function.Consumer;
  * @author Antoine Willerval
  */
 public class CompressFourSectionDictionary implements TempDictionary {
-	private static final int PIPE_BULK_BUFFER_SIZE = 128 * 1024;
+	private static final int PIPE_BULK_BUFFER_SIZE = PipedCopyIterator.BATCH_SIZE;
+	private static final Logger log = LoggerFactory.getLogger(CompressFourSectionDictionary.class);
 
 	private final ExceptionThread cfsdThread;
 	private final TempDictionarySection subject;

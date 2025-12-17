@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Files;
 
 /**
  * Map a compress triple file to long array map files
@@ -45,18 +46,33 @@ public class CompressTripleMapper implements CompressFourSectionDictionary.NodeC
 		this.graphs = graphs;
 		int numbits = BitUtil.log2(tripleCount + 2) + CompressUtil.INDEX_SHIFT;
 		int maxElement = (int) Math.min(chunkSize / Long.BYTES / 3, Integer.MAX_VALUE - 5);
+		try {
+			// Avoid eagerly zero-filling brand new mapping files. If the files
+			// exist from a previous run, delete them first to preserve the
+			// "unwritten slots read as zero" invariant.
+			Files.deleteIfExists(locationSubjects);
+			Files.deleteIfExists(locationPredicates);
+			Files.deleteIfExists(locationObjects);
+			if (quads) {
+				Files.deleteIfExists(locationGraph);
+			}
+		} catch (IOException e) {
+			throw new RuntimeException("Can't reset disk mapping files", e);
+		}
+
 		subjects = new WriteLongArrayBuffer(
-				new SequenceLog64BigDisk(locationSubjects.toAbsolutePath().toString(), numbits, tripleCount + 2, true),
-				tripleCount, maxElement);
-		predicates = new WriteLongArrayBuffer(new SequenceLog64BigDisk(locationPredicates.toAbsolutePath().toString(),
-				numbits, tripleCount + 2, true), tripleCount, maxElement);
+				new SequenceLog64BigDisk(locationSubjects, numbits, tripleCount + 2, true, false), tripleCount,
+				maxElement);
+		predicates = new WriteLongArrayBuffer(
+				new SequenceLog64BigDisk(locationPredicates, numbits, tripleCount + 2, true, false), tripleCount,
+				maxElement);
 		objects = new WriteLongArrayBuffer(
-				new SequenceLog64BigDisk(locationObjects.toAbsolutePath().toString(), numbits, tripleCount + 2, true),
-				tripleCount, maxElement);
+				new SequenceLog64BigDisk(locationObjects, numbits, tripleCount + 2, true, false), tripleCount,
+				maxElement);
 		if (quads) {
 			graph = new WriteLongArrayBuffer(
-					new SequenceLog64BigDisk(locationGraph.toAbsolutePath().toString(), numbits, tripleCount + 2, true),
-					tripleCount, maxElement);
+					new SequenceLog64BigDisk(locationGraph, numbits, tripleCount + 2, true, false), tripleCount,
+					maxElement);
 		} else {
 			graph = null;
 		}

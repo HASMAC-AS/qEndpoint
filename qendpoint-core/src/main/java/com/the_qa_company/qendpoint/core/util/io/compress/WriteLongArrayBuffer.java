@@ -59,7 +59,6 @@ public class WriteLongArrayBuffer implements LongArray, Closeable {
 		flush();
 		bufferInt = null;
 		bufferLong = null;
-		System.gc();
 	}
 
 	private ArrayElement get(int index) {

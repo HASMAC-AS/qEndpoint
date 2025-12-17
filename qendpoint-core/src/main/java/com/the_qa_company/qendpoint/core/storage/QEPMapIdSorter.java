@@ -7,7 +7,7 @@ import com.the_qa_company.qendpoint.core.iterator.utils.ExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.FetcherExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.FetcherIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.IteratorChunkedSource;
-import com.the_qa_company.qendpoint.core.iterator.utils.PriorityQueueMergeExceptionIterator;
+import com.the_qa_company.qendpoint.core.iterator.utils.LoserTreeMergeExceptionIterator;
 import com.the_qa_company.qendpoint.core.iterator.utils.SizedSupplier;
 import com.the_qa_company.qendpoint.core.util.BitUtil;
 import com.the_qa_company.qendpoint.core.util.concurrent.KWayMerger;
@@ -27,7 +27,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * Ids sorter for the {@link QEPMap} linking process
@@ -201,8 +200,8 @@ public class QEPMapIdSorter implements Closeable, Iterable<QEPMapIdSorter.QEPMap
 					for (InputStream inputStream : pathInput) {
 						readers.add(new QEPMapReader(inputStream));
 					}
-					ExceptionIterator<QEPMapIds, IOException> merged = PriorityQueueMergeExceptionIterator
-							.merge(readers, QEPMapIds::compareTo);
+					ExceptionIterator<QEPMapIds, IOException> merged = LoserTreeMergeExceptionIterator.merge(readers,
+							QEPMapIds::compareTo);
 
 					try (BufferedOutputStream stream = new BufferedOutputStream(Files.newOutputStream(output),
 							IO_BUFFER_SIZE)) {
