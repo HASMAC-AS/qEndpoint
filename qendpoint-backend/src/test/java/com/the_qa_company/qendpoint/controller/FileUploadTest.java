@@ -85,11 +85,12 @@ public class FileUploadTest {
 		Path testDir = Paths.get("tests", "testrdf");
 		Files.createDirectories(testDir);
 		Path RDFFile = testDir.resolve(COKTAILS_NT + "." + format.getDefaultFileExtension());
-		if (!Files.exists(RDFFile)) {
+		if (!Files.exists(RDFFile) || format == RDFFormat.HDT) {
 			try (OutputStream os = new FileOutputStream(RDFFile.toFile()); InputStream is = stream(COKTAILS_NT)) {
 				if (format == RDFFormat.HDT) {
-					try (HDT hdt = HDTManager.generateHDT(is, "http://example.org/#", RDFNotation.TURTLE,
-							HDTOptions.empty(), ProgressListener.ignore())) {
+					RDFNotation rdfNotation = RDFNotation.guess(COKTAILS_NT);
+					try (HDT hdt = HDTManager.generateHDT(is, "http://example.org/#", rdfNotation, HDTOptions.empty(),
+							ProgressListener.ignore())) {
 						hdt.saveToHDT(os);
 					}
 				} else {

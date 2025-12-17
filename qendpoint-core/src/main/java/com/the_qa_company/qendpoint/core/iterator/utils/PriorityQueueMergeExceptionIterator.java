@@ -56,7 +56,7 @@ public class PriorityQueueMergeExceptionIterator<T, E extends Exception> impleme
 	private T next;
 
 	public PriorityQueueMergeExceptionIterator(List<? extends ExceptionIterator<T, E>> sources,
-											   Comparator<? super T> comparator) {
+			Comparator<? super T> comparator) {
 		this.sources = sources == null ? List.of() : sources;
 		this.comparator = Objects.requireNonNull(comparator, "comparator");
 		this.size = computeSize(this.sources);
