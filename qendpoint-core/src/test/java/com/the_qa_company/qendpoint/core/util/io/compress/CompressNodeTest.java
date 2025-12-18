@@ -1,6 +1,7 @@
 package com.the_qa_company.qendpoint.core.util.io.compress;
 
 import com.the_qa_company.qendpoint.core.triples.IndexedNode;
+import com.the_qa_company.qendpoint.core.util.crc.CRCInputStream;
 import org.junit.Assert;
 import org.junit.Test;
 import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionThread;
@@ -8,10 +9,26 @@ import com.the_qa_company.qendpoint.core.util.concurrent.ExceptionThread;
 import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.util.Arrays;
 import java.util.List;
 
 public class CompressNodeTest {
+	private static final VarHandle STREAM_HANDLE = streamHandle();
+
+	private static VarHandle streamHandle() {
+		try {
+			return MethodHandles.privateLookupIn(CompressNodeReader.class, MethodHandles.lookup())
+					.findVarHandle(CompressNodeReader.class, "stream", CRCInputStream.class);
+		} catch (ReflectiveOperationException e) {
+			throw new ExceptionInInitializerError(e);
+		}
+	}
+
+	private static CRCInputStream streamOf(CompressNodeReader reader) {
+		return (CRCInputStream) STREAM_HANDLE.get(reader);
+	}
 
 	@Test
 	public void writeReadTest() throws InterruptedException, IOException {
@@ -21,6 +38,7 @@ public class CompressNodeTest {
 					new IndexedNode("jack", 2), new IndexedNode("michel", 3));
 			new ExceptionThread(() -> {
 				CompressNodeReader reader = new CompressNodeReader(in);
+				CRCInputStream readerStream = streamOf(reader);
 				Assert.assertEquals(nodes.size(), reader.getSize());
 				try {
 					for (IndexedNode excepted : nodes) {
@@ -30,9 +48,9 @@ public class CompressNodeTest {
 						CompressTest.assertCharSequenceEquals("indexed node", excepted.getNode(), actual.getNode());
 					}
 					reader.checkComplete();
-					Assert.assertEquals(34, in.read());
-					Assert.assertEquals(12, in.read());
-					Assert.assertEquals(27, in.read());
+					Assert.assertEquals(34, readerStream.read());
+					Assert.assertEquals(12, readerStream.read());
+					Assert.assertEquals(27, readerStream.read());
 				} finally {
 					in.close();
 				}
@@ -62,6 +80,7 @@ public class CompressNodeTest {
 					new IndexedNode("jack", 2), new IndexedNode("michel", 3));
 			new ExceptionThread(() -> {
 				CompressNodeReader reader = new CompressNodeReader(in);
+				CRCInputStream readerStream = streamOf(reader);
 				Assert.assertEquals(nodes.size(), reader.getSize());
 				try {
 					for (IndexedNode excepted : nodes) {
@@ -71,9 +90,9 @@ public class CompressNodeTest {
 						CompressTest.assertCharSequenceEquals("indexed node", excepted.getNode(), actual.getNode());
 					}
 					reader.checkComplete();
-					Assert.assertEquals(34, in.read());
-					Assert.assertEquals(12, in.read());
-					Assert.assertEquals(27, in.read());
+					Assert.assertEquals(34, readerStream.read());
+					Assert.assertEquals(12, readerStream.read());
+					Assert.assertEquals(27, readerStream.read());
 				} finally {
 					in.close();
 				}
@@ -98,6 +117,7 @@ public class CompressNodeTest {
 					new IndexedNode("jack", 2), new IndexedNode("michel", 3));
 			new ExceptionThread(() -> {
 				CompressNodeReader reader = new CompressNodeReader(in);
+				CRCInputStream readerStream = streamOf(reader);
 				Assert.assertEquals(nodes.size(), reader.getSize());
 				try {
 					for (IndexedNode excepted : nodes) {
@@ -113,9 +133,9 @@ public class CompressNodeTest {
 						reader.pass();
 					}
 					reader.checkComplete();
-					Assert.assertEquals(34, in.read());
-					Assert.assertEquals(12, in.read());
-					Assert.assertEquals(27, in.read());
+					Assert.assertEquals(34, readerStream.read());
+					Assert.assertEquals(12, readerStream.read());
+					Assert.assertEquals(27, readerStream.read());
 				} finally {
 					in.close();
 				}
@@ -157,6 +177,7 @@ public class CompressNodeTest {
 					new IndexedNode("zzzfff", 5), new IndexedNode("zzzggg", 7));
 			new ExceptionThread(() -> {
 				CompressNodeReader reader = new CompressNodeReader(finalIn);
+				CRCInputStream readerStream = streamOf(reader);
 				Assert.assertEquals(finalExcepted.size(), reader.getSize());
 				try {
 					for (IndexedNode excepted : finalExcepted) {
@@ -166,9 +187,9 @@ public class CompressNodeTest {
 						CompressTest.assertCharSequenceEquals("merged node", excepted.getNode(), actual.getNode());
 					}
 					reader.checkComplete();
-					Assert.assertEquals(98, finalIn.read());
-					Assert.assertEquals(18, finalIn.read());
-					Assert.assertEquals(22, finalIn.read());
+					Assert.assertEquals(98, readerStream.read());
+					Assert.assertEquals(18, readerStream.read());
+					Assert.assertEquals(22, readerStream.read());
 				} finally {
 					finalIn.close();
 				}
@@ -191,19 +212,26 @@ public class CompressNodeTest {
 					node2Out.close();
 				}
 			}, "Write2Test"), new ExceptionThread(() -> {
+				CompressNodeReader reader1 = new CompressNodeReader(node1In);
+				CompressNodeReader reader2 = new CompressNodeReader(node2In);
+				CRCInputStream reader1Stream = streamOf(reader1);
+				CRCInputStream reader2Stream = streamOf(reader2);
 				try {
-					CompressUtil.mergeCompressedSection(node1In, node2In, finalOut, null);
+					CompressUtil.writeCompressedSection(new CompressNodeMergeIterator(reader1, reader2),
+							reader1.getSize() + reader2.getSize(), finalOut, null);
+					reader1.checkComplete();
+					reader2.checkComplete();
 					finalOut.write(98);
 					finalOut.write(18);
 					finalOut.write(22);
 
-					Assert.assertEquals(34, node1In.read());
-					Assert.assertEquals(12, node1In.read());
-					Assert.assertEquals(27, node1In.read());
+					Assert.assertEquals(34, reader1Stream.read());
+					Assert.assertEquals(12, reader1Stream.read());
+					Assert.assertEquals(27, reader1Stream.read());
 
-					Assert.assertEquals(42, node2In.read());
-					Assert.assertEquals(19, node2In.read());
-					Assert.assertEquals(1, node2In.read());
+					Assert.assertEquals(42, reader2Stream.read());
+					Assert.assertEquals(19, reader2Stream.read());
+					Assert.assertEquals(1, reader2Stream.read());
 				} finally {
 					try {
 						node1In.close();
