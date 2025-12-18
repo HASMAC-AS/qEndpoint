@@ -30,6 +30,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Supplier;
 
 /**
@@ -49,7 +50,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 	private final int bufferSize;
 	private final int k;
 	private final int maxConcurrentMerges;
-	private final AtomicLong triplesCount = new AtomicLong();
+	private final LongAdder triplesCount = new LongAdder();
 	private final ConcurrentHashMap<CloseSuppressPath, Long> tripleCountByFile = new ConcurrentHashMap<>();
 	private final long chunkSize;
 	private final long graphs;
@@ -112,7 +113,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 		if (sections.isEmpty()) {
 			return new TripleCompressionResultEmpty(order);
 		}
-		long outputTripleCount = tripleCountByFile.getOrDefault(sections.get(), triplesCount.get());
+		long outputTripleCount = tripleCountByFile.getOrDefault(sections.get(), triplesCount.sum());
 		return new TripleCompressionResultFile(outputTripleCount, sections.get(), order, bufferSize, graphs);
 	}
 
@@ -180,6 +181,8 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 		};
 	}
 
+	int localCount = 0;
+
 	@Override
 	public void createChunk(SizedSupplier<TripleID> flux, CloseSuppressPath output)
 			throws KWayMerger.KWayMergerException {
@@ -187,7 +190,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 		int expectedCapacity = (int) Math.min(Integer.MAX_VALUE - 5L, Math.max(16L, chunkSize / elementSize));
 		BufferedTriples buffer = new BufferedTriples(expectedCapacity);
 		ParallelSortableArrayList<TripleID> tripleIDS = buffer.triples;
-		listener.notifyProgress(10, "reading triples part2 {}", triplesCount.get());
+		listener.notifyProgress(10, "reading triples part2 {}", triplesCount.sum());
 		TripleID next;
 		boolean quad = mapper.supportsGraph();
 		while ((next = flux.get()) != null) {
@@ -203,9 +206,9 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 			}
 			assert mappedTriple.isValid();
 			tripleIDS.add(mappedTriple);
-			long count = triplesCount.incrementAndGet();
-			if (count % 100_000 == 0) {
-				listener.notifyProgress(10, "reading triples part2 {}", count);
+			triplesCount.increment();
+			if ((localCount++) % 10_000 == 0) {
+				listener.notifyProgress(10, "reading triples part2 {}", triplesCount.sum());
 			}
 			if (tripleIDS.size() == Integer.MAX_VALUE - 6) {
 				break;
@@ -239,7 +242,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 					written++;
 				}
 				tripleCountByFile.put(output, written);
-				listener.notifyProgress(100, "writing completed {} {}", triplesCount.get(), output.getFileName());
+				listener.notifyProgress(100, "writing completed {} {}", triplesCount.sum(), output.getFileName());
 			}
 		} catch (IOException e) {
 			throw new KWayMerger.KWayMergerException(e);
@@ -320,7 +323,7 @@ public class MapCompressTripleMerger implements KWayMerger.KWayMergerImpl<Triple
 		if (sections.isEmpty()) {
 			return new TripleCompressionResultEmpty(order);
 		}
-		long outputTripleCount = tripleCountByFile.getOrDefault(sections.get(), triplesCount.get());
+		long outputTripleCount = tripleCountByFile.getOrDefault(sections.get(), triplesCount.sum());
 		return new TripleCompressionResultFile(outputTripleCount, sections.get(), order, bufferSize, graphs);
 	}
 
