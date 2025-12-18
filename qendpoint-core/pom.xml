@@ -51,7 +51,7 @@
 
         <jena.version>4.3.2</jena.version>
         <slf4j.version>1.7.30</slf4j.version>
-        <lz4.version>1.8.0</lz4.version>
+        <lz4.version>1.8.1</lz4.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
