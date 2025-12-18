@@ -213,9 +213,9 @@ public class CompressFourSectionDictionary implements TempDictionary {
 		cfsdThread = new ExceptionThread(() -> {
 			long itemsProcess = 0;
 			long l = System.currentTimeMillis();
-			Files.writeString(
-					Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_start_time.txt"),
-					"CFSD Start time: " + l + "\n");
+//			Files.writeString(
+//					Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_start_time.txt"),
+//					"CFSD Start time: " + l + "\n");
 
 			try {
 				long sharedId = 1;
@@ -293,13 +293,13 @@ public class CompressFourSectionDictionary implements TempDictionary {
 				objectDuplicateBuffer.flush();
 				object.closePipe();
 
-				long end = System.currentTimeMillis();
-				Files.writeString(
-						Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_end_time.txt"),
-						"CFSD End time: " + end + "\n");
-				Files.writeString(
-						Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_total_time.txt"),
-						"CFSD Total time: " + (end - l) / 1000 + " s\n");
+//				long end = System.currentTimeMillis();
+//				Files.writeString(
+//						Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_end_time.txt"),
+//						"CFSD End time: " + end + "\n");
+//				Files.writeString(
+//						Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_total_time.txt"),
+//						"CFSD Total time: " + (end - l) / 1000 + " s\n");
 
 			} catch (Throwable t) {
 				try {
@@ -347,17 +347,17 @@ public class CompressFourSectionDictionary implements TempDictionary {
 	}
 
 	private static long logProgress(long itemsProcess, long l) throws IOException {
-		if (itemsProcess++ % 1_000_000 == 0) {
-			long current = System.currentTimeMillis();
-			long elapsedSeconds = Math.max(1L, (current - l) / 1000L);
-			long itemsPerSecond = itemsProcess / elapsedSeconds;
-			String datetime = ZonedDateTime.now().format(PROGRESS_DATE_TIME_FORMAT);
-			Files.writeString(
-					Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_profress.txt"),
-					"CFSD progress [" + datetime + "]: " + itemsProcess + " triples processed, " + itemsPerSecond
-							+ " triples/s\n",
-					StandardOpenOption.APPEND, StandardOpenOption.CREATE);
-		}
+//		if (itemsProcess++ % 1_000_000 == 0) {
+//			long current = System.currentTimeMillis();
+//			long elapsedSeconds = Math.max(1L, (current - l) / 1000L);
+//			long itemsPerSecond = itemsProcess / elapsedSeconds;
+//			String datetime = ZonedDateTime.now().format(PROGRESS_DATE_TIME_FORMAT);
+//			Files.writeString(
+//					Path.of("/Users/havardottestad/Documents/Programming/qEndpoint3/indexing/cfds_profress.txt"),
+//					"CFSD progress [" + datetime + "]: " + itemsProcess + " triples processed, " + itemsPerSecond
+//							+ " triples/s\n",
+//					StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+//		}
 		return itemsProcess;
 	}
 
