@@ -1,1 +1,1 @@
-- fix multi-index merge (#560)
+- Upgrade rdf4j version to 5.2.0 (#567)
